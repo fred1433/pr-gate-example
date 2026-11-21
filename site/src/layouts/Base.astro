@@ -27,7 +27,7 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, '');
     </header>
     <main><slot /></main>
     <footer class="foot">
-      <span>Mockingbird &amp; Pike, Austin, Texas. A fictional firm.</span>
+      <span>Mockingbird &amp; Pike, Austin, Texas. A fictional firm. <a href={`${base}/privacy/`}>Privacy</a></span>
       <a href={`tel:${site.phone.e164}`}>{site.phone.display}</a>
     </footer>
   </body>
