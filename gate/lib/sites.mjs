@@ -1,13 +1,23 @@
-// Loads and validates sites.yaml (the example registry of this demo).
-import { readFileSync } from 'node:fs';
+// Loads and validates the site registry (site-registry.yaml, an example written for this demo).
+import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { parse } from 'yaml';
 
+// PR 2 and PR 4 of this demo were written before the registry got its current name,
+// and their commits are kept as they were reviewed; the gate reads the old name there.
+export const REGISTRY = 'site-registry.yaml';
+const EARLIER_NAME = 'sites.yaml';
+
+export function registryFile(repoDir) {
+  return existsSync(join(repoDir, REGISTRY)) || !existsSync(join(repoDir, EARLIER_NAME)) ? REGISTRY : EARLIER_NAME;
+}
+
 export function loadSites(repoDir) {
-  const text = readFileSync(join(repoDir, 'sites.yaml'), 'utf8');
+  const file = registryFile(repoDir);
+  const text = readFileSync(join(repoDir, file), 'utf8');
   const cfg = parse(text);
   const site = (cfg?.sites || []).find((s) => s.path === 'site');
-  return { text, cfg, site };
+  return { file, text, cfg, site };
 }
 
 export function findLine(text, needle) {
@@ -17,9 +27,9 @@ export function findLine(text, needle) {
 
 const DNS_TYPES = new Set(['A', 'AAAA', 'CNAME', 'MX', 'TXT']);
 
-export function validateSites(cfg, text) {
+export function validateSites(cfg, text, file = REGISTRY) {
   const errors = [];
-  const err = (why, needle) => errors.push({ file: 'sites.yaml', line: needle ? findLine(text, needle) : null, why });
+  const err = (why, needle) => errors.push({ file, line: needle ? findLine(text, needle) : null, why });
   if (!cfg || cfg.version !== 1) err('version must be 1');
   if (!Array.isArray(cfg?.sites) || cfg.sites.length === 0) { err('sites must be a non-empty list'); return errors; }
   for (const s of cfg.sites) {

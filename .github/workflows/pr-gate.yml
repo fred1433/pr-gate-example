@@ -1,80 +1,175 @@
 name: PR gate
 
-# pull_request, never pull_request_target: a pull request from a fork runs
-# without secrets and without write access, so it can only end "Verification incomplete".
+# Trusted half of the gate. A workflow_run workflow is always taken from main, so a pull
+# request cannot change it. It never executes the pull request's code on the runner:
+# the PR is read as data (diff, site registry) and its build output, made by the
+# "PR gate: build" job, runs inside workerd, which has no access to the disk.
+# No secret is used anywhere: test tokens are drawn at random for each run.
 on:
-  pull_request:
-    types: [opened, synchronize, reopened, edited]
+  workflow_run:
+    workflows: ["PR gate: build"]
+    types: [requested, completed]
 
-permissions:
-  contents: read
-  pull-requests: write
-
-concurrency:
-  group: pr-gate-${{ github.event.pull_request.number }}
-  cancel-in-progress: true
+permissions: {}
 
 jobs:
+  identify:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      skip: ${{ steps.id.outputs.skip }}
+      pr: ${{ steps.id.outputs.pr }}
+      sha: ${{ steps.id.outputs.sha }}
+      base_sha: ${{ steps.id.outputs.base_sha }}
+      fork: ${{ steps.id.outputs.fork }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: gate
+          persist-credentials: false
+      - id: id
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node gate/identify.mjs
+
+  waiting:
+    needs: identify
+    if: github.event.action == 'requested' && needs.identify.outputs.skip == 'false'
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      statuses: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: gate
+          persist-credentials: false
+      - env:
+          GITHUB_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ needs.identify.outputs.pr }}
+          HEAD_SHA: ${{ needs.identify.outputs.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: node gate/comment.mjs --waiting
+
   gate:
+    needs: identify
+    if: github.event.action == 'completed' && needs.identify.outputs.skip == 'false'
     runs-on: ubuntu-latest
     environment: pr-gate
     timeout-minutes: 20
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
     env:
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      PR_NUMBER: ${{ github.event.pull_request.number }}
-      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      PR: ${{ needs.identify.outputs.pr }}
+      SHA: ${{ needs.identify.outputs.sha }}
+      BASE_SHA: ${{ needs.identify.outputs.base_sha }}
+      GH_TOKEN: ${{ github.token }}
     steps:
-      # The gate's own code always comes from main, so a PR cannot weaken the checks it is judged by.
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.base.sha }}
-          path: base
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-          path: pr
+          path: gate-src
+          fetch-depth: 0
+          persist-credentials: false
+      - name: main and the PR, checked out as data
+        run: |
+          cd gate-src
+          git fetch --no-tags origin "+refs/pull/$PR/head:refs/remotes/origin/pr-head"
+          mb=$(git merge-base "$BASE_SHA" "$SHA")
+          GIT_LFS_SKIP_SMUDGE=1 git -c core.hooksPath=/dev/null worktree add --detach ../base "$mb"
+          GIT_LFS_SKIP_SMUDGE=1 git -c core.hooksPath=/dev/null worktree add --detach ../pr "$SHA"
+          echo "main side: $mb, PR: $SHA"
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-
-      - name: Mark the old verdict as stale
-        continue-on-error: true
-        run: node base/gate/comment.mjs --waiting
-
-      - name: Install
+      - name: Install the gate (main's code, pinned wrangler) and main's site
         run: |
-          npm ci --prefix base/gate
-          npx --prefix base/gate playwright install --with-deps chromium
+          npm ci --prefix gate-src/gate
+          npx --prefix gate-src/gate playwright install --with-deps chromium
           npm ci --prefix base/site
-          npm ci --prefix pr/site
-
+      - name: Fetch the PR's build output
+        id: dl
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: pr-build
+          path: untrusted
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
       - name: Run the gate
         env:
-          FORM_TEST_TOKEN: ${{ secrets.FORM_TEST_TOKEN }}
-          INBOX_TOKEN: ${{ secrets.INBOX_TOKEN }}
-          PR_BODY: ${{ github.event.pull_request.body }}
+          HEAD_SHA: ${{ needs.identify.outputs.sha }}
+          FORK: ${{ needs.identify.outputs.fork }}
+          BUILD_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
         run: |
-          printf '%s\n' "$PR_BODY" > pr-body.md
-          node base/gate/run.mjs --base base --pr pr --out out --pr-body pr-body.md
-
-      - name: Post the verdict on the PR
-        if: always()
-        continue-on-error: true
-        run: node base/gate/comment.mjs --verdict out/comment.md
-
-      - name: Job summary
-        if: always()
-        run: cat out/comment.md >> "$GITHUB_STEP_SUMMARY"
-
+          gh api "repos/$GITHUB_REPOSITORY/pulls/$PR" --jq .body > pr-body.md
+          extra=()
+          if [ "$BUILD_CONCLUSION" = failure ]; then extra=(--pr-build-failed)
+          elif [ ! -f untrusted/sha.txt ]; then extra=(--pr-build-missing "the build job ended $BUILD_CONCLUSION and left no output")
+          elif [ "$(head -c 40 untrusted/sha.txt)" != "$SHA" ]; then extra=(--pr-build-missing "it was built from another commit")
+          fi
+          if [ "$FORK" != false ]; then export GATE_TEST_TOKENS=off; fi
+          node gate-src/gate/run.mjs --base base --pr pr --pr-built untrusted --out "$RUNNER_TEMP/gate-out" --pr-body pr-body.md "${extra[@]}"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: gate-evidence-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}
+          name: gate-evidence
           path: |
-            out/verdict.json
-            out/comment.md
-            out/shots/
-            out/logs/
+            ${{ runner.temp }}/gate-out/verdict.json
+            ${{ runner.temp }}/gate-out/comment.md
+            ${{ runner.temp }}/gate-out/shots/
+            ${{ runner.temp }}/gate-out/logs/
 
-      - name: Fail unless checks passed
-        run: node -e "const v=require('./out/verdict.json'); console.log(v.label); process.exit(v.verdict==='checks-passed'?0:1)"
+  selftest:
+    needs: identify
+    if: github.event.action == 'completed' && needs.identify.outputs.skip == 'false'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install
+        run: |
+          git fetch --force --tags origin
+          npm ci --prefix gate
+          npx --prefix gate playwright install --with-deps chromium
+          npm ci --prefix site
+      - name: Unit tests
+        run: npm test --prefix gate
+      - name: Self-test on every fixture
+        run: node gate/selftest.mjs --work "$RUNNER_TEMP/selftest"
+
+  publish:
+    needs: [identify, gate, selftest]
+    if: always() && github.event.action == 'completed' && needs.identify.outputs.skip == 'false'
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      statuses: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: gate
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: gate-evidence
+          path: evidence-in
+      - name: Post the verdict and the "PR gate" status
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ needs.identify.outputs.pr }}
+          HEAD_SHA: ${{ needs.identify.outputs.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: node gate/comment.mjs --publish evidence-in/verdict.json --selftest "${{ needs.selftest.result }}" --gate-job "${{ needs.gate.result }}"

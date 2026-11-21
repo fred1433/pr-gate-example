@@ -1,40 +1,74 @@
 // Fixed rules over the structured diff. No model reads the diff: every finding
-// comes from comparing parsed sites.yaml files and the changed lines.
-import { readFileSync, existsSync } from 'node:fs';
-import { join } from 'node:path';
+// comes from comparing parsed site registries and the changed lines.
 import { findLine } from './sites.mjs';
+import { VERDICTS } from './render.mjs';
+export { VERDICTS };
 
-export const PROTECTED = [/^\.github\//, /^gate\//, /^ops\//, /^site\/wrangler\.toml$/];
+// Files a pull request from the agent never changes without a person deciding:
+// the gate and its workflows, the agent's own rules, hosting config, and the build
+// (scripts and dependencies run at build time).
+export const PROTECTED = [
+  { re: /^\.github\//, what: 'the workflows that run the gate' },
+  { re: /^gate\//, what: 'the gate itself' },
+  { re: /^ops\/(?!requests\/)/, what: 'the deploy and rollback scripts' },
+  { re: /^CLAUDE\.md$/, what: "the agent's rules" },
+  { re: /^site\/wrangler\.toml$/, what: 'the hosting config' },
+  { re: /^site\/package(-lock)?\.json$/, what: 'the build scripts and dependencies' },
+  { re: /^site\/scripts\//, what: 'the build scripts' },
+  { re: /^site\/astro\.config\.mjs$/, what: 'the build config' },
+];
 const STANDARD_ENV = new Set(['BASE_URL', 'MODE', 'PROD', 'DEV', 'SITE', 'SSR', 'ASSETS', 'INBOX']);
-const ENV_USE = /\b(?:import\.meta\.env|env)\.([A-Z][A-Z0-9_]*)\b/g;
+const ENV_DOT = /\b(?:import\.meta\.env|env)\.([A-Z][A-Z0-9_]*)\b/g;
+const ENV_BRACKET = /\b(?:import\.meta\.env|env)\s*\[\s*(['"`])([A-Z][A-Z0-9_]*)\1\s*\]/g;
+const ENV_DESTRUCTURE = /\{([^{}]*)\}\s*=\s*(?:[\w$]+\.)*env\b/g;
 
 const recKey = (r) => `${r.type} ${r.name} ${r.value}`;
+
+// Every environment key a line of code reads, in the three forms:
+// env.X, env['X'], and const { X } = env (also { X: y = 1 } = Astro.locals.runtime.env).
+export function envKeysRead(line) {
+  const keys = [];
+  for (const m of line.matchAll(ENV_DOT)) keys.push(m[1]);
+  for (const m of line.matchAll(ENV_BRACKET)) keys.push(m[2]);
+  for (const m of line.matchAll(ENV_DESTRUCTURE)) {
+    for (const part of m[1].split(',')) {
+      const name = part.split(/[:=]/)[0].replace(/^\s*\.\.\./, '').trim();
+      if (/^[A-Z][A-Z0-9_]*$/.test(name)) keys.push(name);
+    }
+  }
+  return [...new Set(keys)];
+}
 
 export function sensitiveRule({ base, pr, diff }) {
   const items = [];
   const human = (why, file, line, text) => items.push({ kind: 'human', why, file, line, text });
   const fail = (why, file, line, text) => items.push({ kind: 'fail', why, file, line, text });
   const b = base.site || {}, p = pr.site || {};
+  const bf = `${base.file} on main`, pf = pr.file;
 
   const before = new Set((b.dns || []).map(recKey)), after = new Set((p.dns || []).map(recKey));
-  for (const r of (b.dns || [])) if (!after.has(recKey(r))) human(`DNS record removed: ${recKey(r)}`, 'sites.yaml on main', findLine(base.text, r.value), `- value: "${r.value}"`);
-  for (const r of (p.dns || [])) if (!before.has(recKey(r))) human(`DNS record added: ${recKey(r)}`, 'sites.yaml', findLine(pr.text, r.value), `+ value: "${r.value}"`);
+  for (const r of (b.dns || [])) if (!after.has(recKey(r))) human(`DNS record removed: ${recKey(r)}`, bf, findLine(base.text, r.value), `- value: "${r.value}"`);
+  for (const r of (p.dns || [])) if (!before.has(recKey(r))) human(`DNS record added: ${recKey(r)}`, pf, findLine(pr.text, r.value), `+ value: "${r.value}"`);
 
   const envB = new Set(b.env || []), envP = new Set(p.env || []);
-  for (const k of envB) if (!envP.has(k)) human(`Environment variable removed from the registry: ${k}`, 'sites.yaml on main', findLine(base.text, k), `- ${k}`);
-  for (const k of envP) if (!envB.has(k)) human(`Environment variable added to the registry: ${k}`, 'sites.yaml', findLine(pr.text, k), `+ ${k}`);
-  if (b.domain !== p.domain) human(`Domain changed from ${b.domain} to ${p.domain}`, 'sites.yaml', findLine(pr.text, 'domain:'), `+ domain: ${p.domain}`);
-  if (b.leads?.to !== p.leads?.to) human(`Lead recipient changed from ${b.leads?.to} to ${p.leads?.to}`, 'sites.yaml', findLine(pr.text, 'to:'), `+ to: ${p.leads?.to}`);
-  if (JSON.stringify(b.leads?.required_fields) !== JSON.stringify(p.leads?.required_fields)) human('Required form fields changed in sites.yaml', 'sites.yaml', findLine(pr.text, 'required_fields'), null);
-
-  for (const f of diff) if (PROTECTED.some((re) => re.test(f.path))) human(`Touches ${f.path}, which the agent must not change`, f.path, null, null);
+  for (const k of envB) if (!envP.has(k)) human(`Environment variable removed from the registry: ${k}`, bf, findLine(base.text, k), `- ${k}`);
+  for (const k of envP) if (!envB.has(k)) human(`Environment variable added to the registry: ${k}`, pf, findLine(pr.text, k), `+ ${k}`);
+  if (b.domain !== p.domain) human(`Domain changed from ${b.domain} to ${p.domain}`, pf, findLine(pr.text, 'domain:'), `+ domain: ${p.domain}`);
+  if (b.phone?.e164 !== p.phone?.e164) human(`Office phone number changed from ${b.phone?.e164} to ${p.phone?.e164}`, pf, findLine(pr.text, 'e164:'), `+ e164: "${p.phone?.e164}"`);
+  else if (b.phone?.display !== p.phone?.display) human(`Displayed office phone changed from "${b.phone?.display}" to "${p.phone?.display}"`, pf, findLine(pr.text, 'display:'), `+ display: "${p.phone?.display}"`);
+  if (b.leads?.to !== p.leads?.to) human(`Lead recipient changed from ${b.leads?.to} to ${p.leads?.to}`, pf, findLine(pr.text, 'to:'), `+ to: ${p.leads?.to}`);
+  if (JSON.stringify(b.leads?.required_fields) !== JSON.stringify(p.leads?.required_fields)) human('Required form fields changed in the registry', pf, findLine(pr.text, 'required_fields'), null);
 
   for (const f of diff) {
-    if (!f.path.startsWith('site/') || f.path.endsWith('.yaml')) continue;
+    const hit = PROTECTED.find((x) => x.re.test(f.path));
+    if (hit) human(`Touches ${f.path}: ${hit.what}. The agent does not change these without a person.`, f.path, null, null);
+  }
+
+  for (const f of diff) {
+    if (!f.path.startsWith('site/') || /\.ya?ml$/.test(f.path)) continue;
     for (const a of f.added) {
-      for (const m of a.text.matchAll(ENV_USE)) {
-        const key = m[1];
-        if (!STANDARD_ENV.has(key) && !envP.has(key)) fail(`Code reads ${key}, which sites.yaml does not declare. A key renamed in code only breaks the deployed site.`, f.path, a.line, `+ ${a.text.trim()}`);
+      for (const key of envKeysRead(a.text)) {
+        if (!STANDARD_ENV.has(key) && !envP.has(key)) fail(`Code reads ${key}, which the site registry does not declare. A key renamed in code only breaks the deployed site.`, f.path, a.line, `+ ${a.text.trim()}`);
       }
     }
   }
@@ -49,7 +83,7 @@ export function parseScope(body) {
   const out = [];
   for (const l of lines.slice(i + 1)) {
     const m = /^\s*[-*]\s+`?([^`\s]+)`?/.exec(l);
-    if (m) out.push(m[1]); else if (l.trim()) break;
+    if (m) out.push(m[1].replace(/^\.\//, '')); else if (l.trim()) break;
   }
   return out;
 }
@@ -67,21 +101,14 @@ export function phoneRule({ tels, site }) {
   for (const t of tels) {
     const href = t.href.replace(/\D/g, '').slice(-10);
     const shown = t.text.replace(/\D/g, '');
-    if (href !== expected) items.push({ kind: 'fail', why: `Link on ${t.page} dials ${t.href} but sites.yaml says ${site.phone.e164} (text shown: "${t.text.trim()}")` });
-    else if (shown.length >= 10 && shown.slice(-10) !== expected) items.push({ kind: 'fail', why: `Text on ${t.page} shows "${t.text.trim()}" but the number in sites.yaml is ${site.phone.display}` });
+    if (href !== expected) items.push({ kind: 'fail', why: `Link on ${t.page} dials ${t.href} but the site registry says ${site.phone.e164} (text shown: "${t.text.trim()}")` });
+    else if (shown.length >= 10 && shown.slice(-10) !== expected) items.push({ kind: 'fail', why: `Text on ${t.page} shows "${t.text.trim()}" but the number in the site registry is ${site.phone.display}` });
   }
   if (tels.length === 0) items.push({ kind: 'fail', why: 'No click-to-call link found on any page.' });
   return { status: items.length ? 'fail' : 'pass', items, checked: tels.length };
 }
 
 export const REQUIRED = ['build', 'config', 'sensitive', 'scope', 'visual', 'links', 'phone', 'form'];
-
-export const VERDICTS = {
-  'changes-needed': 'Changes needed',
-  'verification-incomplete': 'Verification incomplete',
-  'human-decision': 'Human decision required',
-  'checks-passed': 'Checks passed: final review required',
-};
 
 export function decide(results, required = REQUIRED) {
   const all = { ...results };
@@ -95,8 +122,3 @@ export function decide(results, required = REQUIRED) {
     : 'checks-passed';
   return { verdict, label: VERDICTS[verdict], results: all };
 }
-
-export function readIfExists(p) {
-  return existsSync(p) ? readFileSync(p, 'utf8') : '';
-}
-export { join };

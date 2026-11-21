@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Runs against the live test site after each deploy or rollback:
 // pages answer, a visitor without the test token is told nothing was sent,
-// and a tokened test submission really lands in the inbox.
+// and a tokened test submission is recorded in the test lead store.
 // Env: LIVE_FORM_TEST_TOKEN, LIVE_INBOX_TOKEN. Optional: LIVE_ORIGIN (default https://theaipipe.com)
 import { randomBytes } from 'node:crypto';
 import { launch, submitForm, readInbox } from '../gate/lib/browser.mjs';
@@ -31,7 +31,7 @@ const got = sub.clicked ? await readInbox({ origin: ORIGIN, base: BASE, token: i
 const msg = got?.messages?.[0];
 const formOk = Boolean(msg && msg.to === 'intake@mockingbirdpike.example' && msg.fields?.case_details?.includes(nonce));
 ok &&= formOk;
-lines.push(`${formOk ? 'ok  ' : 'FAIL'} test lead ${nonce}: page "${sub.heading || sub.error}", inbox ${msg ? `has it for ${msg.to} after ${Math.round(got.waitedMs / 1000)} s` : `does not have it (${got ? (got.reachable ? 'not arrived after 90 s' : 'unreachable: ' + got.status) : 'not submitted'})`}`);
+lines.push(`${formOk ? 'ok  ' : 'FAIL'} test lead ${nonce}: page "${sub.heading || sub.error}", store ${msg ? `recorded it for ${msg.to} after ${Math.round(got.waitedMs / 1000)} s` : `has no record of it (${got ? (got.reachable ? 'not arrived after 90 s' : 'unreachable: ' + got.status) : 'not submitted'})`}`);
 console.log(lines.join('\n'));
 console.log(ok ? 'POST-DEPLOY CHECK PASSED' : 'POST-DEPLOY CHECK FAILED');
 process.exit(ok ? 0 : 1);

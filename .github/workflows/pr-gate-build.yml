@@ -1,0 +1,56 @@
+name: "PR gate: build"
+run-name: "PR gate: build, PR ${{ github.event.pull_request.number || inputs.pr }}"
+
+# Untrusted half of the gate. It runs the pull request's own code (npm install, build)
+# with no secret and a read-only token, and hands over only its output: dist/ and the
+# bundled worker. The verdict is computed elsewhere, by .github/workflows/pr-gate.yml,
+# which GitHub always takes from main.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: Pull request number to check again
+        required: true
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Which commit
+        id: which
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number || inputs.pr }}
+          EVENT_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          [[ "$PR" =~ ^[0-9]+$ ]] || { echo "not a PR number"; exit 1; }
+          sha="$EVENT_SHA"
+          [ -n "$sha" ] || sha=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR" --jq .head.sha)
+          [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || { echo "no head commit"; exit 1; }
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.which.outputs.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Build the site and bundle the worker
+        run: |
+          npm ci --prefix site
+          npm run build --prefix site
+          (cd site && npx wrangler deploy --dry-run --outdir ../pr-build/worker)
+          cp -R site/dist pr-build/dist
+          echo "${{ steps.which.outputs.sha }}" > pr-build/sha.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pr-build
+          path: pr-build/
+          retention-days: 7

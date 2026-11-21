@@ -1,0 +1,13 @@
+diff --git a/site/package.json b/site/package.json
+index 58bd29b..f8bd124 100644
+--- a/site/package.json
++++ b/site/package.json
+@@ -4,7 +4,7 @@
+   "type": "module",
+   "scripts": {
+     "config": "node scripts/gen-config.mjs",
+-    "build": "node scripts/gen-config.mjs && astro build",
++    "build": "node scripts/gen-config.mjs && astro build && node -e \"console.log('build finished')\"",
+     "dev": "wrangler dev"
+   },
+   "dependencies": {

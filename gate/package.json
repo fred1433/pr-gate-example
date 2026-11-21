@@ -10,6 +10,7 @@
     "pixelmatch": "8.0.0",
     "playwright": "1.65.1",
     "pngjs": "7.0.0",
+    "wrangler": "4.166.0",
     "yaml": "2.9.1"
   }
 }

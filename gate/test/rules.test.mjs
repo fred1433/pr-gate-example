@@ -3,15 +3,15 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { parse } from 'yaml';
 import { parseUnified } from '../lib/diff.mjs';
-import { sensitiveRule, scopeRule, parseScope, phoneRule, decide } from '../lib/rules.mjs';
+import { sensitiveRule, scopeRule, parseScope, phoneRule, decide, envKeysRead } from '../lib/rules.mjs';
 import { validateSites } from '../lib/sites.mjs';
 
-const text = readFileSync(new URL('../../sites.yaml', import.meta.url), 'utf8');
-const load = (t) => { const cfg = parse(t); return { text: t, cfg, site: cfg.sites[0] }; };
+const text = readFileSync(new URL('../../site-registry.yaml', import.meta.url), 'utf8');
+const load = (t) => { const cfg = parse(t); return { file: 'site-registry.yaml', text: t, cfg, site: cfg.sites[0] }; };
 const base = load(text);
 const fileDiff = (path, added, removed = []) => [{ path, added: added.map((t, i) => ({ line: i + 1, text: t })), removed: removed.map((t, i) => ({ line: i + 1, text: t })) }];
 
-test('the example sites.yaml is valid', () => {
+test('the example site registry is valid', () => {
   assert.deepEqual(validateSites(base.cfg, base.text), []);
 });
 
@@ -31,19 +31,42 @@ test('a key renamed in code only is stopped, with its line', () => {
 test('adding a TXT verification record needs a person, with the exact line', () => {
   const t = text.replace('    dns:\n', '    dns:\n      - type: TXT\n        name: "@"\n        value: "google-site-verification=abc123"\n');
   const pr = load(t);
-  const r = sensitiveRule({ base, pr, diff: fileDiff('sites.yaml', ['x']) });
+  const r = sensitiveRule({ base, pr, diff: fileDiff('site-registry.yaml', ['x']) });
   assert.equal(r.status, 'human');
   assert.equal(r.items.length, 1);
   assert.equal(r.items[0].line, t.split('\n').findIndex((l) => l.includes('google-site-verification')) + 1);
 });
 
-test('changing the lead recipient in sites.yaml needs a person', () => {
+test('changing the lead recipient in the registry needs a person', () => {
   const pr = load(text.replace('to: intake@mockingbirdpike.example', 'to: intake@other.example'));
-  assert.equal(sensitiveRule({ base, pr, diff: fileDiff('sites.yaml', ['x']) }).status, 'human');
+  assert.equal(sensitiveRule({ base, pr, diff: fileDiff('site-registry.yaml', ['x']) }).status, 'human');
 });
 
-test('touching the workflow or the gate needs a person', () => {
-  for (const p of ['.github/workflows/pr-gate.yml', 'gate/run.mjs', 'site/wrangler.toml']) {
+test('a key renamed in code only is stopped in its three forms: env.X, env[\'X\'], const { X } = env', () => {
+  const lines = [
+    "  if (!env.LEAD_FORM_TOKEN) {",
+    "  if (!env['LEAD_FORM_TOKEN']) {",
+    '  const { LEAD_FORM_TOKEN } = env;',
+    '  const { FORM_TEST_TOKEN, LEAD_FORM_TOKEN: t = "" } = Astro.locals.runtime.env;',
+  ];
+  for (const l of lines) {
+    const r = sensitiveRule({ base, pr: base, diff: fileDiff('site/worker/index.js', [l]) });
+    assert.equal(r.status, 'fail', l);
+    assert.match(r.items[0].why, /LEAD_FORM_TOKEN/, l);
+  }
+  assert.deepEqual(envKeysRead('const { FORM_TEST_TOKEN, INBOX_TOKEN } = env;'), ['FORM_TEST_TOKEN', 'INBOX_TOKEN']);
+  assert.equal(sensitiveRule({ base, pr: base, diff: fileDiff('site/worker/index.js', ['const { FORM_TEST_TOKEN } = env;']) }).status, 'pass');
+});
+
+test('one digit of the office phone changed in the registry needs a person', () => {
+  const pr = load(text.replace('"(512) 555-0147"', '"(512) 555-0174"').replace('"+15125550147"', '"+15125550174"'));
+  const r = sensitiveRule({ base, pr, diff: fileDiff('site-registry.yaml', ['x']) });
+  assert.equal(r.status, 'human');
+  assert.match(r.items[0].why, /\+15125550147 to \+15125550174/);
+});
+
+test('touching the workflow, the gate, the agent rules or the build needs a person', () => {
+  for (const p of ['.github/workflows/pr-gate.yml', 'gate/run.mjs', 'site/wrangler.toml', 'CLAUDE.md', 'site/package.json', 'site/package-lock.json', 'site/scripts/gen-config.mjs', 'ops/deploy.sh']) {
     assert.equal(sensitiveRule({ base, pr: base, diff: fileDiff(p, ['x']) }).status, 'human', p);
   }
 });
@@ -83,4 +106,8 @@ test('diff parser keeps line numbers of added and removed lines', () => {
   assert.equal(d[0].path, 'site/x.astro');
   assert.equal(d[0].removed[0].line, 12);
   assert.equal(d[0].added[0].line, 12);
+});
+
+test('the operator files under ops/requests are plain documents, not protected', () => {
+  assert.equal(sensitiveRule({ base, pr: base, diff: fileDiff('ops/requests/contact-form/1-request.md', ['x']) }).status, 'pass');
 });

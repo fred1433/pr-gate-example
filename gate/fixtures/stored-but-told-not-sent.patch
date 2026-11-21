@@ -1,0 +1,13 @@
+diff --git a/site/worker/index.js b/site/worker/index.js
+index 0c774e7..26bfc8a 100644
+--- a/site/worker/index.js
++++ b/site/worker/index.js
+@@ -35,7 +35,7 @@ async function contact(request, env, origin) {
+   const message = { id, to: site.leads.to, site: site.id, subject: `New intake request from ${fields.name}`, fields, received_at: new Date().toISOString() };
+   await env.INBOX.put(`msg:${message.received_at}:${id}`, JSON.stringify(message), { expirationTtl: 60 * 60 * 24 * 14 });
+   log('lead_delivered', { id, to: message.to });
+-  return redirect(origin, '/thanks/');
++  return redirect(origin, '/not-sent/');
+ }
+ 
+ async function inbox(request, env, url) {

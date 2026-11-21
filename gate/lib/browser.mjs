@@ -89,6 +89,7 @@ export async function submitForm(browser, { origin, base, token, nonce, width, s
       typed[f.field] = f.value(nonce);
       await page.getByLabel(f.label, { exact: true }).fill(typed[f.field], { timeout: 5000 });
     }
+    const nav = page.waitForNavigation({ timeout: 15000 }).catch(() => null);
     try {
       await page.getByRole('button', { name: /send/i }).click({ timeout: 6000 });
     } catch (e) {
@@ -98,12 +99,15 @@ export async function submitForm(browser, { origin, base, token, nonce, width, s
       await ctx.close();
       return { clicked: false, blocker: m ? m[1] : null, error: String(e.message).split('\n')[0], typed };
     }
+    const response = await nav;
     await page.waitForLoadState('networkidle');
-    const heading = (await page.locator('h1').first().textContent().catch(() => '')) || '';
+    const heading = (await page.locator('h1').first().textContent({ timeout: 2000 }).catch(() => '')) || '';
+    const main = page.locator('main');
+    const text = ((await main.count()) ? await main.first().innerText({ timeout: 2000 }).catch(() => '') : await page.locator('body').innerText({ timeout: 2000 }).catch(() => '')) || '';
     if (shotFile) await page.screenshot({ path: shotFile });
     const landedOn = new URL(page.url()).pathname;
     await ctx.close();
-    return { clicked: true, landedOn, heading: heading.trim(), typed };
+    return { clicked: true, landedOn, status: response ? response.status() : null, heading: heading.trim(), text: text.replace(/\s+/g, ' ').trim(), typed };
   } catch (e) {
     await ctx.close();
     return { clicked: false, error: String(e.message).split('\n')[0], typed };

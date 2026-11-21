@@ -1,0 +1,15 @@
+diff --git a/site-registry.yaml b/site-registry.yaml
+index 4160eb4..36681be 100644
+--- a/site-registry.yaml
++++ b/site-registry.yaml
+@@ -7,8 +7,8 @@ sites:
+     domain: mockingbirdpike.example
+     path: site
+     phone:
+-      display: "(512) 555-0147"
+-      e164: "+15125550147"
++      display: "(512) 555-0174"
++      e164: "+15125550174"
+     leads:
+       to: intake@mockingbirdpike.example
+       required_fields:

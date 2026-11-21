@@ -17,7 +17,8 @@ check=$(node ops/postdeploy-check.mjs 2>&1) && status=0 || status=$?
   echo "### $(TZ=America/Chicago date '+%Y-%m-%d %H:%M %Z') rollback to version $version"
   echo "Reason: $reason"
   echo '```'
-  grep -E 'WARNING|Success' "$out" | head -3
+  # wrangler's own prompts and decorations stay out of the log; only its result line is kept
+  grep -E 'Success|Worker Version ID' "$out" | sed -E 's/[^[:print:]]//g; s/^[[:space:]]+//' | head -2
   echo "$check"
   echo '```'
 } >> evidence/deploy-log.md

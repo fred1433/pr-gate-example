@@ -1,5 +1,5 @@
-# Example for this demo. A made-up registry for one fictional site.
-# It is not copied from any agency; the field names are ours.
+# Example for this demo: the site registry of one fictional site.
+# Made up for this demo, not copied from any agency; the field names are ours.
 version: 1
 sites:
   - id: mockingbird-pike

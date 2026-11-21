@@ -9,12 +9,15 @@ import { mkdirSync, rmSync, readFileSync, symlinkSync, existsSync, writeFileSync
 import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
+import { buildSite } from './lib/serve.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = resolve(HERE, '..');
 const argv = process.argv.slice(2);
 const opt = (k) => { const i = argv.indexOf(`--${k}`); return i === -1 ? null : argv[i + 1]; };
-if (argv.includes('--mutant') && !opt('mutant')) { console.error('usage: --mutant <no-form-check|form-not-run>'); process.exit(2); }
+for (const k of ['mutant', 'only', 'work']) {
+  if (argv.includes(`--${k}`) && (!opt(k) || opt(k).startsWith('--'))) { console.error(`usage: node gate/selftest.mjs [--only <case>] [--mutant <no-form-check|form-not-run>] [--work <dir>]\n--${k} needs a value`); process.exit(2); }
+}
 const MUTANT = opt('mutant') || '';
 if (MUTANT && !['no-form-check', 'form-not-run'].includes(MUTANT)) { console.error(`unknown mutant "${MUTANT}"; use no-form-check or form-not-run`); process.exit(2); }
 const WORK = resolve(opt('work') || join(tmpdir(), 'pr-gate-selftest'));
@@ -30,8 +33,16 @@ const CASES = [
   { name: 'sticky-bar', fixture: 'sticky-bar', expect: 'changes-needed' },
   { name: 'text-mentions-dns', fixture: 'text-mentions-dns', expect: 'checks-passed' },
   { name: 'env-key-code-only', fixture: 'env-key-code-only', expect: 'changes-needed' },
-  { name: 'fork-no-secrets', fixture: 'good', expect: 'verification-incomplete', env: { FORM_TEST_TOKEN: '', INBOX_TOKEN: '' } },
-  { name: 'inbox-unreachable', fixture: 'good', expect: 'verification-incomplete', env: { GATE_INBOX_TOKEN_SERVER_OVERRIDE: 'a-different-token' } },
+  // Four pull requests an outside reviewer wrote to get past the gate (21 Nov):
+  { name: 'thanks-page-deleted', fixture: 'thanks-page-deleted', expect: 'changes-needed' },
+  { name: 'stored-but-told-not-sent', fixture: 'stored-but-told-not-sent', expect: 'changes-needed' },
+  { name: 'copy-to-other-client', fixture: 'copy-to-other-client', expect: 'changes-needed' },
+  { name: 'registry-phone-digit', fixture: 'registry-phone-digit', expect: 'human-decision' },
+  // and the build script that tried to rewrite the verdict: on GitHub it runs in a job
+  // that never sees the verdict; here it shows that build files need a person.
+  { name: 'build-script-change', fixture: 'build-script-change', expect: 'human-decision' },
+  { name: 'fork-no-tokens', fixture: 'good', expect: 'verification-incomplete', env: { GATE_TEST_TOKENS: 'off' } },
+  { name: 'store-unreadable', fixture: 'good', expect: 'verification-incomplete', env: { GATE_STORE_NAMESPACE: 'a-store-that-does-not-exist' } },
   { name: 'form-check-not-run', fixture: 'good', expect: 'changes-needed', env: { GATE_MUTANT: 'form-not-run' }, noMutant: true },
 ].filter((c) => !ONLY || c.name === ONLY);
 if (!CASES.length) { console.error(`no case named ${ONLY}`); process.exit(2); }
@@ -40,10 +51,17 @@ if (!CASES.length) { console.error(`no case named ${ONLY}`); process.exit(2); }
 // The gate code under test is always the current one.
 function copyRepo(dest) {
   mkdirSync(dest, { recursive: true });
-  const r = spawnSync('sh', ['-c', `git -C "$0" archive fixtures-base sites.yaml CLAUDE.md site | tar -x -C "$1"`, REPO, dest], { encoding: 'utf8' });
+  const r = spawnSync('sh', ['-c', `git -C "$0" archive fixtures-base site-registry.yaml CLAUDE.md site | tar -x -C "$1"`, REPO, dest], { encoding: 'utf8' });
   if (r.status !== 0) throw new Error(`git archive fixtures-base: ${r.stderr}`);
   symlinkSync(join(REPO, 'site', 'node_modules'), join(dest, 'site', 'node_modules'));
 }
+
+// main is built once (it is the same for every case); each PR is built in its own case.
+const baseSrc = join(WORK, '_main');
+rmSync(baseSrc, { recursive: true, force: true });
+copyRepo(baseSrc);
+const baseBuilt = buildSite(baseSrc, join(WORK, '_main-built'), join(WORK, '_main-build.log'));
+if (!baseBuilt.ok) { console.error(`main does not build:\n${baseBuilt.tail}`); process.exit(1); }
 
 const rows = [];
 for (const c of CASES) {
@@ -54,9 +72,11 @@ for (const c of CASES) {
   const p = spawnSync('patch', ['-p1', '-s', '-d', join(dir, 'pr'), '-i', join(HERE, 'fixtures', `${c.fixture}.patch`)], { encoding: 'utf8' });
   if (p.status !== 0) throw new Error(`patch ${c.fixture}: ${p.stdout}${p.stderr}`);
   const env = { ...process.env, ...(c.env || {}) };
+  delete env.GATE_TEST_TOKENS; delete env.GATE_STORE_NAMESPACE;
+  Object.assign(env, c.env || {});
   if (MUTANT && !c.noMutant) env.GATE_MUTANT = MUTANT;
   const t0 = Date.now();
-  const r = spawnSync('node', [join(HERE, 'run.mjs'), '--base', join(dir, 'base'), '--pr', join(dir, 'pr'), '--out', join(dir, 'out'), '--pr-body', join(HERE, 'fixtures', `${c.fixture}.body.md`)], { env, encoding: 'utf8' });
+  const r = spawnSync('node', [join(HERE, 'run.mjs'), '--base-built', join(WORK, '_main-built'), '--base', join(dir, 'base'), '--pr', join(dir, 'pr'), '--out', join(dir, 'out'), '--pr-body', join(HERE, 'fixtures', `${c.fixture}.body.md`)], { env, encoding: 'utf8' });
   const vfile = join(dir, 'out', 'verdict.json');
   const got = existsSync(vfile) ? JSON.parse(readFileSync(vfile, 'utf8')).verdict : `crash: ${(r.stderr || '').split('\n')[0]}`;
   const ok = got === c.expect;

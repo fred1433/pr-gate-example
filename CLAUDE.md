@@ -14,9 +14,11 @@ the conventions are ours, not any agency's.
 - Text and layout, as long as the checks on the PR stay green.
 
 ## What needs a human decision
-- Anything under `dns`, `env`, `domain` or `leads` in `sites.yaml`.
-- `.github/`, `gate/`, `ops/` and `site/wrangler.toml`. Leave them alone.
+- Anything under `dns`, `env`, `domain`, `phone` or `leads` in `site-registry.yaml`.
+- `.github/`, `gate/`, `ops/`, this file, `site/wrangler.toml`, and the build
+  files (`site/package.json`, `site/package-lock.json`, `site/scripts/`,
+  `site/astro.config.mjs`). Leave them alone.
 
 ## Facts you never type by hand
-- Phone numbers, lead recipients and domains come from `sites.yaml`
+- Phone numbers, lead recipients and domains come from `site-registry.yaml`
   through `site/src/site.json`. Do not hard-code them in components.

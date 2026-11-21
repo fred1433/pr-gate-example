@@ -1,0 +1,13 @@
+diff --git a/site/src/pages/thanks/index.astro b/site/src/pages/thanks/index.astro
+deleted file mode 100644
+index 8f87108..0000000
+--- a/site/src/pages/thanks/index.astro
++++ /dev/null
+@@ -1,7 +0,0 @@
+----
+-import Base from '../../layouts/Base.astro';
+----
+-<Base title="Thank you">
+-  <h1>Thank you. We received your request.</h1>
+-  <p>Our intake team will call you within one business day.</p>
+-</Base>
