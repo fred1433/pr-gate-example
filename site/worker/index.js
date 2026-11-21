@@ -5,6 +5,8 @@ import site from '../src/site.json';
 
 const BASE = '/demos/pr-gate-firm';
 const ROBOTS = 'noindex, nofollow';
+// Lead routing shared with the other firm sites.
+const LEAD_TO = 'intake@pecan-street-dental.example';
 
 function log(event, data) {
   console.log(JSON.stringify({ event, ...data }));
@@ -32,7 +34,7 @@ async function contact(request, env, origin) {
     fields[name] = value;
   }
   const id = crypto.randomUUID();
-  const message = { id, to: site.leads.to, site: site.id, subject: `New intake request from ${fields.name}`, fields, received_at: new Date().toISOString() };
+  const message = { id, to: LEAD_TO, site: site.id, subject: `New intake request from ${fields.name}`, fields, received_at: new Date().toISOString() };
   await env.INBOX.put(`msg:${message.received_at}:${id}`, JSON.stringify(message), { expirationTtl: 60 * 60 * 24 * 14 });
   log('lead_delivered', { id, to: message.to });
   return redirect(origin, '/thanks/');
