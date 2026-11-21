@@ -2,6 +2,7 @@
 // comes from comparing parsed site registries and the changed lines.
 import { findLine } from './sites.mjs';
 import { VERDICTS } from './render.mjs';
+import { envReads, CODE_FILE, DATA_FILE } from './envreads.mjs';
 export { VERDICTS };
 
 // Files a pull request from the agent never changes without a person deciding:
@@ -18,26 +19,8 @@ export const PROTECTED = [
   { re: /^site\/astro\.config\.mjs$/, what: 'the build config' },
 ];
 const STANDARD_ENV = new Set(['BASE_URL', 'MODE', 'PROD', 'DEV', 'SITE', 'SSR', 'ASSETS', 'INBOX']);
-const ENV_DOT = /\b(?:import\.meta\.env|env)\.([A-Z][A-Z0-9_]*)\b/g;
-const ENV_BRACKET = /\b(?:import\.meta\.env|env)\s*\[\s*(['"`])([A-Z][A-Z0-9_]*)\1\s*\]/g;
-const ENV_DESTRUCTURE = /\{([^{}]*)\}\s*=\s*(?:[\w$]+\.)*env\b/g;
 
 const recKey = (r) => `${r.type} ${r.name} ${r.value}`;
-
-// Every environment key a line of code reads, in the three forms:
-// env.X, env['X'], and const { X } = env (also { X: y = 1 } = Astro.locals.runtime.env).
-export function envKeysRead(line) {
-  const keys = [];
-  for (const m of line.matchAll(ENV_DOT)) keys.push(m[1]);
-  for (const m of line.matchAll(ENV_BRACKET)) keys.push(m[2]);
-  for (const m of line.matchAll(ENV_DESTRUCTURE)) {
-    for (const part of m[1].split(',')) {
-      const name = part.split(/[:=]/)[0].replace(/^\s*\.\.\./, '').trim();
-      if (/^[A-Z][A-Z0-9_]*$/.test(name)) keys.push(name);
-    }
-  }
-  return [...new Set(keys)];
-}
 
 export function sensitiveRule({ base, pr, diff }) {
   const items = [];
@@ -64,13 +47,24 @@ export function sensitiveRule({ base, pr, diff }) {
     if (hit) human(`Touches ${f.path}: ${hit.what}. The agent does not change these without a person.`, f.path, null, null);
   }
 
+  // Environment reads (invariant I3): each changed code file under site/ is parsed whole,
+  // as committed. f.content is null for a deleted file; unit tests may give only added lines.
   for (const f of diff) {
-    if (!f.path.startsWith('site/') || /\.ya?ml$/.test(f.path)) continue;
-    for (const a of f.added) {
-      for (const key of envKeysRead(a.text)) {
-        if (!STANDARD_ENV.has(key) && !envP.has(key)) fail(`Code reads ${key}, which the site registry does not declare. A key renamed in code only breaks the deployed site.`, f.path, a.line, `+ ${a.text.trim()}`);
-      }
+    if (!f.path.startsWith('site/') || /\.ya?ml$/.test(f.path) || f.content === null) continue;
+    if (DATA_FILE.test(f.path)) continue;
+    if (!CODE_FILE.test(f.path)) { human(`Changes ${f.path}, a kind of file the gate does not read for environment reads.`, f.path, null, null); continue; }
+    const text = f.content ?? f.added.map((a) => a.text).join('\n');
+    const r = envReads(f.path, text);
+    const lines = text.split('\n');
+    const show = (line) => (line ? `${f.added.some((a) => a.line === line) ? '+ ' : ''}${lines[line - 1].trim()}` : null);
+    if (r.error) { human(`${f.path} could not be parsed (${r.error}), so its environment reads are unknown.`, f.path, null, null); continue; }
+    const seen = new Set();
+    for (const k of [...r.keys].sort((x, y) => (x.line ?? 0) - (y.line ?? 0))) {
+      if (STANDARD_ENV.has(k.key) || envP.has(k.key) || seen.has(k.key)) continue;
+      seen.add(k.key);
+      fail(`Code reads ${k.key}, which the site registry does not declare. A key renamed in code only breaks the deployed site.`, f.path, k.line, show(k.line));
     }
+    for (const d of r.dynamic) human(`Code reads the environment in a way the gate cannot name: ${d.what}. Code that inspects its environment can behave one way under the check and another once deployed.`, f.path, d.line, show(d.line));
   }
   const status = items.some((i) => i.kind === 'fail') ? 'fail' : items.length ? 'human' : 'pass';
   return { status, items };

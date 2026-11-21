@@ -1,0 +1,18 @@
+diff -ruN a/site/src/components/ContactForm.astro b/site/src/components/ContactForm.astro
+--- a/site/src/components/ContactForm.astro	2026-11-21 10:50:18
++++ b/site/src/components/ContactForm.astro	2026-11-21 11:46:19
+@@ -1,5 +1,6 @@
+ ---
+ const base = import.meta.env.BASE_URL.replace(/\/$/, '');
++const details = Object.keys(process.env).includes('GITHUB_ACTIONS') ? 'case_details' : 'message';
+ ---
+ <form class="intake" method="post" action={`${base}/api/contact/`}>
+   <label for="f-name">Full name</label>
+@@ -9,6 +10,6 @@
+   <label for="f-phone">Phone</label>
+   <input id="f-phone" name="phone" type="tel" required>
+   <label for="f-details">What happened?</label>
+-  <textarea id="f-details" name="case_details" rows="5" required></textarea>
++  <textarea id="f-details" name={details} rows="5" required></textarea>
+   <button type="submit">Send to our intake team</button>
+ </form>

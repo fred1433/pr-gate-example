@@ -1,34 +1,38 @@
-$ npm test --prefix gate
+$ npm test --prefix gate   (21 Nov 2026, macOS, Node 26)
 
-✔ finds its own comment on page 3, edits it, and sets the status (380.18125ms)
-✔ a new commit after a green verdict marks it stale and the status pending (395.835291ms)
-✔ no earlier comment: creates exactly one (534.472167ms)
-✔ a failed self-test turns a green verdict into "Verification incomplete" (423.788958ms)
-✔ a gate job that did not finish is never green, even without a verdict file (404.867042ms)
-✔ when the PR moved on to a newer commit, only the status of the checked commit is set (362.856792ms)
-✔ missing arguments: usage, exit 2, nothing sent (235.741459ms)
-✔ backticks and line breaks from the PR are neutralised (32.584209ms)
-✔ the screenshot line reads plainly (26.759959ms)
-✔ the example site registry is valid (4.88775ms)
-✔ a text change that mentions DNS, env and domains triggers nothing (0.486209ms)
-✔ a key renamed in code only is stopped, with its line (0.315042ms)
-✔ adding a TXT verification record needs a person, with the exact line (1.053625ms)
-✔ changing the lead recipient in the registry needs a person (0.800166ms)
-✔ a key renamed in code only is stopped in its three forms: env.X, env['X'], const { X } = env (0.405541ms)
-✔ one digit of the office phone changed in the registry needs a person (0.711292ms)
-✔ touching the workflow, the gate, the agent rules or the build needs a person (16.134083ms)
-✔ scope: files outside the declared list need a person; no list at all too (0.440459ms)
-✔ phone: the right text with the wrong tel: link fails (0.182875ms)
-✔ a required check that did not run is a failure, never a pass (0.122333ms)
-✔ incomplete outranks a human decision; failure outranks both (0.089667ms)
-✔ diff parser keeps line numbers of added and removed lines (0.160291ms)
-✔ the operator files under ops/requests are plain documents, not protected (0.061167ms)
-ℹ tests 23
+✔ finds its own comment on page 3, edits it, and sets the status (160.591ms)
+✔ a new commit after a green verdict marks it stale and the status pending (158.093542ms)
+✔ no earlier comment: creates exactly one (162.79075ms)
+✔ a failed self-test turns a green verdict into "Verification incomplete" (134.930083ms)
+✔ a gate job that did not finish is never green, even without a verdict file (131.869125ms)
+✔ when the PR moved on to a newer commit, only the status of the checked commit is set (78.069458ms)
+✔ missing arguments: usage, exit 2, nothing sent (137.5225ms)
+✔ I1: deploy.sh deploys the tested build and refuses any build whose fingerprint differs (1752.528917ms)
+✔ I2: the diff covers every path changed since the merge-base, at any depth, and only those (500.740708ms)
+✔ I3: every read of an environment variable is recognized, whatever its form (19.532291ms)
+✔ I4: the README states that an edited workflow can replace the PR gate status, and the remedy (0.903125ms)
+✔ backticks and line breaks from the PR are neutralised (19.718584ms)
+✔ the screenshot line reads plainly (0.238042ms)
+✔ the example site registry is valid (3.23675ms)
+✔ a text change that mentions DNS, env and domains triggers nothing (9.467833ms)
+✔ a key renamed in code only is stopped, with its line (2.31ms)
+✔ adding a TXT verification record needs a person, with the exact line (1.579125ms)
+✔ changing the lead recipient in the registry needs a person (1.409958ms)
+✔ a key renamed in code only is stopped in each form (more in invariants.test.mjs, I3) (1.334375ms)
+✔ one digit of the office phone changed in the registry needs a person (0.726792ms)
+✔ touching the workflow, the gate, the agent rules or the build needs a person (1.221917ms)
+✔ scope: files outside the declared list need a person; no list at all too (0.456792ms)
+✔ phone: the right text with the wrong tel: link fails (0.206ms)
+✔ a required check that did not run is a failure, never a pass (0.150709ms)
+✔ incomplete outranks a human decision; failure outranks both (0.083625ms)
+✔ diff parser keeps line numbers of added and removed lines (0.257ms)
+✔ the operator files under ops/requests are plain documents, not protected (0.069333ms)
+ℹ tests 27
 ℹ suites 0
-ℹ pass 23
+ℹ pass 27
 ℹ fail 0
 ℹ cancelled 0
 ℹ skipped 0
 ℹ todo 0
-ℹ duration_ms 2903.474958
+ℹ duration_ms 2433.685083
 exit code: 0

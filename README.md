@@ -37,12 +37,28 @@ purpose, so that nothing is merged without a person.
    shown number both match the registry).
 4. **`site-registry.yaml`** is valid, and fixed rules over the parsed diff flag DNS, env,
    domain, phone and lead-routing changes with their exact line. A word like "DNS" in
-   page text triggers nothing. An environment key renamed in code only is stopped,
-   whether the code reads `env.X`, `env['X']` or `const { X } = env`.
-5. **Protected files**: `.github/`, `gate/`, `ops/` scripts, `CLAUDE.md`,
+   page text triggers nothing.
+5. **Environment reads.** Each changed code file under `site/` is parsed whole: `.astro`
+   files by Astro's own compiler, then the code by `@babel/parser`. A key the registry
+   does not declare is stopped, in any form: `env.X`, `env?.X`, `env['X']`, a
+   destructuring over several lines, an alias, a function parameter that receives the
+   environment. A use the gate cannot name (`Object.keys(process.env)`, `{ ...env }`,
+   `env[someVar]`) needs a person.
+6. **Protected files**: `.github/`, `gate/`, `ops/` scripts, `CLAUDE.md`,
    `site/wrangler.toml` and the build files (`site/package.json`, its lock file,
    `site/scripts/`, `site/astro.config.mjs`) always need a person.
-6. **Scope**: files changed outside the PR's `Files in scope:` list need a person.
+7. **Scope**: files changed outside the PR's `Files in scope:` list need a person.
+
+The diff behind checks 4 to 7 is git's, from the merge-base to the PR commit, with no
+path left out: a file under a folder called `dist` is judged like any other.
+
+What the gate tested is what gets deployed: the PR's build is copied into
+`tested-build/`, fingerprinted (SHA-256 over every path and content), served from that
+copy, and kept with the evidence. `ops/deploy.sh` deploys that copy and nothing else,
+and refuses if its fingerprint differs. It never builds.
+
+The four properties above that an outside review broke once, and their tests, are in
+[`docs/invariants.md`](docs/invariants.md).
 
 No model reads the diff. Every finding comes from code you can read in `gate/`.
 
@@ -61,11 +77,12 @@ The workflow is split in two.
   verdict. GitHub always runs a `workflow_run` workflow from `main`, so a pull request
   cannot edit it. Its jobs:
   - `gate` takes its code, its pinned wrangler and the serving config from `main`,
-    reads the PR as data (diff, registry), and serves the build artifact in workerd,
+    reads the PR as data (diff, registry), fingerprints the build artifact, and serves it in workerd,
     which has no access to the disk, with a fresh local store. The store is read back
     by the gate through wrangler's local commands, not through an endpoint of the PR.
     Its token is read-only.
-  - `selftest` runs the unit tests and every fixture case of `gate/selftest.mjs`.
+  - `selftest` runs the unit tests, the mutation test of the invariants
+    (`gate/mutants.mjs`) and every fixture case of `gate/selftest.mjs`.
     If it fails, the verdict is at best "Verification incomplete".
   - `publish` posts the comment and the `PR gate` status. It runs none of the PR's
     code; it reads the verdict file and calls the GitHub API.
@@ -80,18 +97,28 @@ where the verdict is computed, where a write token exists, or where they could r
 the verdict file. A build script that tries to rewrite the verdict (PR 9 of this demo)
 only touches its own throwaway job, and changing build files needs a person anyway.
 
-What it does not guarantee: someone allowed to push branches here can also edit the
-build workflow, and GitHub runs that edited copy for their pull request, with the token
-permissions it asks for, setting a commit status included. The verdict workflow still
-comes from `main` and answers "Human decision required" for any change under
-`.github/`, but a status set by the edited job would sit beside it. Give the coding
-agent a token without the `workflow` permission and GitHub refuses any push that edits
-a workflow file.
+What it does not guarantee: a pull request that edits a workflow file can replace the
+`PR gate` status. GitHub keeps only the latest status for each context, and the ruleset
+asks for `PR gate` set by GitHub Actions, which is also where an edited workflow runs. A
+`pull_request` job that grants itself `statuses: write` can wait for the verdict, then
+post a green `PR gate` over it, and the ruleset would accept it. It can edit the bot's
+comment too. Anyone who pushes a branch with a token that has the `workflow` scope can do
+this; the token that pushed this demo's pull requests has that scope.
+
+Every pull request that touches `.github/` already gets "Human decision required". That
+does not protect against this case: the verdict is one more status under the same name,
+and the edited job can replace it.
+
+The remedy is a GitHub App whose private key lives only in the `pr-gate` environment
+(which runs only from `main`): the `publish` job posts the verdict with that App, and the
+ruleset requires `PR gate` from that App alone. It is not installed in this demo. Until
+it is, give the coding agent a token without the `workflow` scope: GitHub then refuses
+any push that edits a workflow file.
 
 ## Commands
 
 ```sh
-# unit tests of the rules, the comment and the status (no browser, no network)
+# unit tests of the rules, the comment, the status and the four invariants (no browser)
 npm ci --prefix gate && npm test --prefix gate
 
 # the gate on fixture PRs, each against its expected verdict
@@ -103,14 +130,23 @@ node gate/selftest.mjs --only broken-form
 # so this run is expected to FAIL (exit 1); that failure is the proof the check matters
 node gate/selftest.mjs --mutant no-form-check
 
-# the gate on two checkouts of your own (it builds both: use it on code you trust)
-node gate/run.mjs --base <main checkout> --pr <PR checkout> --out <dir> --pr-body <file>
+# invariant tests and their mutants: each mutant removes one invariant (docs/invariants.md)
+# and the run passes only if the tests catch every one of them
+node gate/mutants.mjs
+
+# the gate on two worktrees of one clone, the PR one fully committed
+# (it builds both: use it on code you trust)
+git worktree add ../main-wt main && git worktree add ../pr-wt <PR branch>
+npm ci --prefix ../main-wt/site && npm ci --prefix ../pr-wt/site
+node gate/run.mjs --base ../main-wt --pr ../pr-wt --out <dir> --pr-body <file>
 
 # check a pull request again on GitHub (also works for a closed or merged one)
 gh workflow run "PR gate: build" -f pr=<number>
 
-# deploy and roll back the live test site (our Cloudflare account; prints usage without arguments)
-ops/deploy.sh "<reason>"
+# deploy the build a gate run tested, from a checkout of that commit (our Cloudflare
+# account; prints usage without arguments; --dry-run checks everything, needs no token)
+gh run download <gate run id> -n gate-evidence -D <dir>
+ops/deploy.sh [--dry-run] <dir> "<reason>"
 ops/rollback.sh <version-id> "<reason>"
 ```
 
@@ -122,7 +158,9 @@ Results of these runs are kept in `evidence/`.
   written for this demo. Not any agency's format.
 - `site/`: the Astro site and its form handler (`site/worker/index.js`).
 - `gate/`: the checks, the self-test and the fixtures (`gate/fixtures/*.patch`, applied
-  to the tag `fixtures-base`).
+  to the tag `fixtures-base` and committed, so the gate reads them through git), and the
+  mutation test (`gate/mutants.mjs`).
+- `docs/invariants.md`: what the gate must keep, and the test and mutant for each.
 - `ops/`: deploy, rollback, post-deploy check, and `ops/requests/`, one operator task
   from vague request to delivery note.
 
@@ -134,4 +172,9 @@ Results of these runs are kept in `evidence/`.
   email step. No email provider account is used, and email delivery is not tested.
 - PR 2 and PR 4 were written before `sites.yaml` was renamed `site-registry.yaml`.
   Their commits are kept as they were reviewed, so the gate reads the old name there.
+- Code written to detect the test can pass it. The rule on environment reads stops the
+  forms listed above; anything else that tells the check apart from production (a date,
+  the host name, the request headers) is for the person who reads the diff. Deploying
+  only the tested build means such code cannot behave differently once deployed than it
+  did under the check, at build time; at run time it still can.
 - Merging stays a human decision.

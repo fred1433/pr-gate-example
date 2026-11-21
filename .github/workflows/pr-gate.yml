@@ -122,6 +122,7 @@ jobs:
             ${{ runner.temp }}/gate-out/comment.md
             ${{ runner.temp }}/gate-out/shots/
             ${{ runner.temp }}/gate-out/logs/
+            ${{ runner.temp }}/gate-out/tested-build/
 
   selftest:
     needs: identify
@@ -133,7 +134,7 @@ jobs:
     # The job itself stays green; its result is handed to publish, which turns a failed
     # self-test into "Verification incomplete" on the pull request.
     outputs:
-      result: ${{ steps.unit.outcome == 'success' && steps.self.outcome == 'success' && 'success' || 'failure' }}
+      result: ${{ steps.unit.outcome == 'success' && steps.mutants.outcome == 'success' && steps.self.outcome == 'success' && 'success' || 'failure' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -152,6 +153,10 @@ jobs:
         id: unit
         continue-on-error: true
         run: npm test --prefix gate
+      - name: Mutation test of the invariants (docs/invariants.md)
+        id: mutants
+        continue-on-error: true
+        run: node gate/mutants.mjs
       - name: Self-test on every fixture
         id: self
         continue-on-error: true

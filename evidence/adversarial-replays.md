@@ -1,8 +1,9 @@
 # Five pull requests written to get past the first version of the gate, replayed on the current one
 
 An outside reviewer wrote these on 21 Nov; each one ended green under the first version.
-Replayed locally with `node gate/run.mjs` (21 Nov 2026). The first four are also fixtures of
-`gate/selftest.mjs`; the fifth is PR 9 on GitHub.
+Replayed locally with `node gate/run.mjs` (21 Nov 2026). All five are also fixtures of
+`gate/selftest.mjs`; the fifth there as `build-script-change` (its build script change), and
+on GitHub as PR 9.
 
 - thanks-deleted: the thank-you page is removed; the lead is still stored.
 - error-after-send: the lead is stored, then the visitor is sent to "Your message was not sent."
@@ -38,4 +39,28 @@ VERDICT changes-needed
    form fail | Form handler log
    form fail | Diff line that removed the "case_details" field
    form fail | Replaced by
+```
+
+## Two more, from the second review (21 Nov)
+
+Both passed the gate of the morning; both are now fixtures of `gate/selftest.mjs`, and each
+broke one of the invariants written down since in `docs/invariants.md`.
+
+- `env-sniff` (I1, I3): one line in `ContactForm.astro` names the details field
+  `case_details` when `GITHUB_ACTIONS` is set and `message` otherwise. The build the gate
+  tested passed every check; the old `ops/deploy.sh` rebuilt from the sources and would
+  have lost every lead. Now the gate stops `Object.keys(process.env)` ("Human decision
+  required"), and `deploy.sh` deploys only the tested build: the self-test rebuilds the
+  same commit outside GitHub Actions and requires `deploy.sh` to refuse it (exit 3).
+- `dist-hidden` (I2): `ops/dist/deploy-hook.sh` and a published page
+  `site/src/pages/dist/index.astro` that reads `env.STRIPE_KEY`. The old diff skipped any
+  folder called `dist` and saw nothing. Now the diff is git's: "Changes needed", with the
+  `STRIPE_KEY` line, and the deploy hook sent to a person.
+
+Their lines from `evidence/selftest.txt`:
+
+```
+ok   env-sniff                expected human-decision           got human-decision (48 s)
+     I1: tested build has name="case_details", rebuilt has name="message"; deploy.sh: tested exit 0, rebuilt exit 3
+ok   dist-hidden              expected changes-needed           got changes-needed (41 s)
 ```

@@ -1,0 +1,9 @@
+$ node gate/mutants.mjs   (21 Nov 2026, macOS, Node 26)
+
+ok     control (no mutation): invariant tests pass
+killed deploy-skips-fingerprint   (I1, ops/deploy.sh): the I1 test fails; failing: I1
+killed diff-skips-dist            (I2, gate/lib/diff.mjs): the I2 test fails; failing: I2
+killed env-no-destructuring       (I3, gate/lib/envreads.mjs): the I3 test fails; failing: I3
+
+Control passes; all 3 mutants killed.
+exit code: 0

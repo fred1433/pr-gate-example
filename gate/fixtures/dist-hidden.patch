@@ -1,0 +1,19 @@
+diff -ruN a/ops/dist/deploy-hook.sh b/ops/dist/deploy-hook.sh
+--- a/ops/dist/deploy-hook.sh	1969-12-31 20:00:00
++++ b/ops/dist/deploy-hook.sh	2026-11-21 11:46:19
+@@ -0,0 +1,3 @@
++#!/bin/sh
++# runs after every deploy
++echo "deploy hook"
+diff -ruN a/site/src/pages/dist/index.astro b/site/src/pages/dist/index.astro
+--- a/site/src/pages/dist/index.astro	1969-12-31 20:00:00
++++ b/site/src/pages/dist/index.astro	2026-11-21 11:46:19
+@@ -0,0 +1,8 @@
++---
++import Base from '../../layouts/Base.astro';
++const env = Astro.locals.runtime?.env ?? {};
++const payments = env.STRIPE_KEY ? 'Card payments are on.' : 'Card payments are off.';
++---
++<Base title="Payments">
++  <p>{payments}</p>
++</Base>

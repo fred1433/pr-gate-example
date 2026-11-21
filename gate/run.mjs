@@ -3,7 +3,9 @@
 //   node gate/run.mjs --base <checkout of main> --pr <checkout of the PR> --out <dir>
 //                     [--pr-body <file>] [--base-built <dir>] [--pr-built <dir>] [--pr-build-failed] [--pr-build-missing <reason>]
 //
-// --base and --pr are read as data: the diff and the site registry come from them.
+// --base and --pr are read as data: the diff and the site registry come from them. They are
+// two worktrees of one clone (git worktree add), and the PR one holds only committed files:
+// the diff is git's, merge-base to PR commit (docs/invariants.md, I2).
 // --pr-built is the output of the untrusted build job (dist/ and worker/index.js). Without
 // it, the PR is built here, which runs its npm scripts: do that only on code you trust
 // (the self-test fixtures). On GitHub the PR is always built in its own job.
@@ -14,7 +16,8 @@
 import { mkdirSync, writeFileSync, readFileSync, statSync, existsSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 import { randomBytes } from 'node:crypto';
-import { computeDiff } from './lib/diff.mjs';
+import { computeDiff, revisions } from './lib/diff.mjs';
+import { collectArtifact } from './lib/fingerprint.mjs';
 import { loadSites, validateSites } from './lib/sites.mjs';
 import { sensitiveRule, scopeRule, phoneRule, decide, REQUIRED } from './lib/rules.mjs';
 import { launch, shoot, pixelDiff, crawl, submitForm, FORM_FIELDS } from './lib/browser.mjs';
@@ -30,7 +33,7 @@ const MUTANT = process.env.GATE_MUTANT || '';
 const tok = () => randomBytes(16).toString('hex');
 const TOKENS = process.env.GATE_TEST_TOKENS === 'off' ? null : { base: { form: tok(), store: tok() }, pr: { form: tok(), store: tok() } };
 const WAIT_MS = Number(process.env.GATE_INBOX_WAIT_MS || 20000);
-const HEAD_SHA = (process.env.HEAD_SHA || 'local').slice(0, 7);
+let HEAD_SHA = (process.env.HEAD_SHA || 'local').slice(0, 7);
 const PORTS = { base: Number(process.env.GATE_PORT_BASE || 8801), pr: Number(process.env.GATE_PORT_PR || 8802) };
 mkdirSync(join(OUT, 'shots'), { recursive: true });
 mkdirSync(join(OUT, 'logs'), { recursive: true });
@@ -64,6 +67,10 @@ function built(tag, srcDir, given) {
 }
 
 async function main() {
+  // The diff of the merge-base against the PR commit, from git, nothing excluded (I2).
+  const revs = revisions(BASE_DIR, PR_DIR);
+  facts.commit = revs.prRev; facts.mergeBase = revs.mergeBase;
+  if (!process.env.HEAD_SHA) HEAD_SHA = facts.sha = revs.prRev.slice(0, 7);
   const diff = computeDiff(BASE_DIR, PR_DIR);
   facts.changed = diff.map((f) => f.path);
   const base = loadSites(BASE_DIR), pr = loadSites(PR_DIR);
@@ -82,7 +89,11 @@ async function main() {
   else if (pb.missing) results.build = { status: 'incomplete', items: [{ kind: 'incomplete', why: `The output of the build job is not usable: ${clean(pb.missing, 200)}` }] };
   else if (!pb.ok) results.build = { status: 'fail', items: [{ kind: 'fail', why: 'The PR does not build.', text: pb.tail }] };
   else {
-    const sdb = prepareServeDir(bb.dir, join(WORK, 'serve-base')), sdp = prepareServeDir(pb.dir, join(WORK, 'serve-pr'));
+    // The PR's build is copied once into tested-build/ and fingerprinted; that copy is what
+    // the gate serves, what the evidence keeps, and the only thing ops/deploy.sh deploys (I1).
+    const tested = collectArtifact(pb.dir, join(OUT, 'tested-build'), facts.commit);
+    if (tested.ok) facts.artifact = { dir: 'tested-build', sha256: tested.sha256 };
+    const sdb = prepareServeDir(bb.dir, join(WORK, 'serve-base')), sdp = tested.ok ? prepareServeDir(join(OUT, 'tested-build'), join(WORK, 'serve-pr')) : tested;
     if (!sdb.ok) results.build = { status: 'incomplete', items: [{ kind: 'incomplete', why: `main's build is unusable: ${sdb.why}` }] };
     else if (!sdp.ok) results.build = { status: 'fail', items: [{ kind: 'fail', why: `The PR's build is unusable: ${sdp.why}` }] };
     else results.build = { status: 'pass', items: [] };

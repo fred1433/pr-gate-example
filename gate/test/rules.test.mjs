@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { parse } from 'yaml';
 import { parseUnified } from '../lib/diff.mjs';
-import { sensitiveRule, scopeRule, parseScope, phoneRule, decide, envKeysRead } from '../lib/rules.mjs';
+import { sensitiveRule, scopeRule, parseScope, phoneRule, decide } from '../lib/rules.mjs';
 import { validateSites } from '../lib/sites.mjs';
 
 const text = readFileSync(new URL('../../site-registry.yaml', import.meta.url), 'utf8');
@@ -21,7 +21,7 @@ test('a text change that mentions DNS, env and domains triggers nothing', () => 
 });
 
 test('a key renamed in code only is stopped, with its line', () => {
-  const diff = fileDiff('site/worker/index.js', ['  if (!env.LEAD_FORM_TOKEN || token !== env.LEAD_FORM_TOKEN) {']);
+  const diff = fileDiff('site/worker/index.js', ['  if (!env.LEAD_FORM_TOKEN || token !== env.LEAD_FORM_TOKEN) {}']);
   const r = sensitiveRule({ base, pr: base, diff });
   assert.equal(r.status, 'fail');
   assert.match(r.items[0].why, /LEAD_FORM_TOKEN/);
@@ -42,20 +42,19 @@ test('changing the lead recipient in the registry needs a person', () => {
   assert.equal(sensitiveRule({ base, pr, diff: fileDiff('site-registry.yaml', ['x']) }).status, 'human');
 });
 
-test('a key renamed in code only is stopped in its three forms: env.X, env[\'X\'], const { X } = env', () => {
+test('a key renamed in code only is stopped in each form (more in invariants.test.mjs, I3)', () => {
   const lines = [
-    "  if (!env.LEAD_FORM_TOKEN) {",
-    "  if (!env['LEAD_FORM_TOKEN']) {",
-    '  const { LEAD_FORM_TOKEN } = env;',
-    '  const { FORM_TEST_TOKEN, LEAD_FORM_TOKEN: t = "" } = Astro.locals.runtime.env;',
+    'if (!env.LEAD_FORM_TOKEN) {}',
+    "if (!env['LEAD_FORM_TOKEN']) {}",
+    'const { LEAD_FORM_TOKEN } = env;',
+    'const { FORM_TEST_TOKEN, LEAD_FORM_TOKEN: t = "" } = Astro.locals.runtime.env;',
   ];
   for (const l of lines) {
     const r = sensitiveRule({ base, pr: base, diff: fileDiff('site/worker/index.js', [l]) });
     assert.equal(r.status, 'fail', l);
     assert.match(r.items[0].why, /LEAD_FORM_TOKEN/, l);
   }
-  assert.deepEqual(envKeysRead('const { FORM_TEST_TOKEN, INBOX_TOKEN } = env;'), ['FORM_TEST_TOKEN', 'INBOX_TOKEN']);
-  assert.equal(sensitiveRule({ base, pr: base, diff: fileDiff('site/worker/index.js', ['const { FORM_TEST_TOKEN } = env;']) }).status, 'pass');
+  assert.equal(sensitiveRule({ base, pr: base, diff: fileDiff('site/worker/index.js', ['const { FORM_TEST_TOKEN, INBOX_TOKEN } = env;']) }).status, 'pass');
 });
 
 test('one digit of the office phone changed in the registry needs a person', () => {
@@ -102,7 +101,7 @@ test('incomplete outranks a human decision; failure outranks both', () => {
 });
 
 test('diff parser keeps line numbers of added and removed lines', () => {
-  const d = parseUnified('--- a/x\n+++ b/site/x.astro\n@@ -12 +12 @@\n-  <textarea name="case_details">\n+  <textarea name="message">\n');
+  const d = [...parseUnified('diff --git a/site/x.astro b/site/x.astro\n--- a/site/x.astro\n+++ b/site/x.astro\n@@ -12 +12 @@\n-  <textarea name="case_details">\n+  <textarea name="message">\n').values()];
   assert.equal(d[0].path, 'site/x.astro');
   assert.equal(d[0].removed[0].line, 12);
   assert.equal(d[0].added[0].line, 12);
