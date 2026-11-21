@@ -77,3 +77,16 @@ ok   visitor without test token lands on /demos/pr-gate-firm/not-sent/ ("Your me
 ok   test lead f41854f222: page "Thank you. We received your request.", store recorded it for intake@mockingbirdpike.example after 14 s
 POST-DEPLOY CHECK PASSED
 ```
+
+### 2026-11-21 09:12 CST deploy of commit 058966e
+Reason: First deploy by the new deploy.sh: the build the gate tested
+Tested build: fingerprint 6cef1fd4d48421472513c39e8ea3c5077757e71f180f695c5acbc4e684f2ec86 (gate verdict "checks-passed")
+Worker version: 76eed2b4-80a8-4d85-baf0-08a4c2ffe708
+```
+ok   GET /demos/pr-gate-firm/ -> 200, x-robots-tag: noindex, nofollow
+ok   GET /demos/pr-gate-firm/contact/ -> 200, x-robots-tag: noindex, nofollow
+ok   GET /demos/pr-gate-firm/attorneys/ -> 200, x-robots-tag: noindex, nofollow
+ok   visitor without test token lands on /demos/pr-gate-firm/not-sent/ ("Your message was not sent.")
+ok   test lead d1471ed3e4: page "Thank you. We received your request.", store recorded it for intake@mockingbirdpike.example after 2 s
+POST-DEPLOY CHECK PASSED
+```
