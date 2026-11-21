@@ -35,11 +35,12 @@ const CASES = [
 ].filter((c) => !ONLY || c.name === ONLY);
 if (!CASES.length) { console.error(`no case named ${ONLY}`); process.exit(2); }
 
+// Fixtures are patches against the tag fixtures-base, so they keep applying after main moves on.
+// The gate code under test is always the current one.
 function copyRepo(dest) {
   mkdirSync(dest, { recursive: true });
-  const r = spawnSync('rsync', ['-a', '--exclude', 'node_modules', '--exclude', 'dist', '--exclude', '.astro', '--exclude', '.wrangler', '--exclude', '.dev.vars', '--exclude', 'site.json',
-    join(REPO, 'sites.yaml'), join(REPO, 'CLAUDE.md'), join(REPO, 'site'), dest + '/'], { encoding: 'utf8' });
-  if (r.status !== 0) throw new Error(r.stderr);
+  const r = spawnSync('sh', ['-c', `git -C "$0" archive fixtures-base sites.yaml CLAUDE.md site | tar -x -C "$1"`, REPO, dest], { encoding: 'utf8' });
+  if (r.status !== 0) throw new Error(`git archive fixtures-base: ${r.stderr}`);
   symlinkSync(join(REPO, 'site', 'node_modules'), join(dest, 'site', 'node_modules'));
 }
 

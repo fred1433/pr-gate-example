@@ -63,7 +63,7 @@ Results of these runs are kept in `evidence/`.
 - `sites.yaml`, `CLAUDE.md`: an example registry and example agent rules written for
   this demo. Not any agency's format.
 - `site/`: the Astro site and its form handler (`site/worker/index.js`).
-- `gate/`: the checks, the self-test and the fixtures (`gate/fixtures/*.patch`).
+- `gate/`: the checks, the self-test and the fixtures (`gate/fixtures/*.patch`, applied to the tag `fixtures-base`).
 - `ops/`: deploy, rollback, post-deploy check, and `ops/requests/`, one operator task
   from vague request to delivery note.
 - `.github/workflows/pr-gate.yml`: runs on `pull_request` (never `pull_request_target`).
