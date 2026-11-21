@@ -25,7 +25,9 @@ main { max-width: 1040px; margin: 0 auto; padding: 48px 32px 16px; }
 .intake input, .intake textarea { font: 17px system-ui, sans-serif; padding: 11px 12px; border: 1px solid #b9b4a4; border-radius: 3px; background: #fff; width: 100%; }
 .intake button { margin-top: 18px; padding: 14px 22px; font: 600 16px system-ui, sans-serif; background: var(--green); color: #fff; border: 0; border-radius: 3px; cursor: pointer; justify-self: start; }
 .foot { display: flex; justify-content: space-between; gap: 16px; padding: 14px 32px; border-top: 1px solid var(--line); font: 14px system-ui, sans-serif; color: #55615b; }
+.mobile-bar { display: none; }
 @media (max-width: 640px) {
+  .mobile-bar { display: block; position: fixed; left: 0; right: 0; bottom: 0; z-index: 10; padding: 36px 16px 40px; background: var(--brass); color: #fff; text-align: center; font: 16px/1.4 system-ui, sans-serif; text-decoration: none; }
   .top { padding: 14px 16px; gap: 12px; }
   .top nav { order: 3; flex-basis: 100%; gap: 16px; }
   main { padding: 28px 16px 12px; }
