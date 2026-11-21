@@ -16,6 +16,7 @@ const argv = process.argv.slice(2);
 const opt = (k) => { const i = argv.indexOf(`--${k}`); return i === -1 ? null : argv[i + 1]; };
 if (argv.includes('--mutant') && !opt('mutant')) { console.error('usage: --mutant <no-form-check|form-not-run>'); process.exit(2); }
 const MUTANT = opt('mutant') || '';
+if (MUTANT && !['no-form-check', 'form-not-run'].includes(MUTANT)) { console.error(`unknown mutant "${MUTANT}"; use no-form-check or form-not-run`); process.exit(2); }
 const WORK = resolve(opt('work') || join(tmpdir(), 'pr-gate-selftest'));
 const ONLY = opt('only');
 
