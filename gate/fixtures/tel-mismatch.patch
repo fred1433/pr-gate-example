@@ -1,0 +1,11 @@
+diff -ruN a/site/src/pages/index.astro b/site/src/pages/index.astro
+--- a/site/src/pages/index.astro	2026-11-21 09:47:41
++++ b/site/src/pages/index.astro	2026-11-21 09:52:29
+@@ -7,6 +7,7 @@
+     <h1>Hurt in a crash on a Texas road? Tell us what happened.</h1>
+     <p>Mockingbird &amp; Pike handles injury claims for drivers, riders and families. The first conversation is free and you owe nothing unless we recover for you.</p>
+     <a class="cta" href={`${base}/contact/`}>Request a free case review</a>
++    <a class="cta" href="tel:+15125550174">Call (512) 555-0147</a>
+   </section>
+   <section class="areas" id="practice">
+     <div><h2>Car and truck crashes</h2><p>Highway collisions, commercial trucks, rideshare drivers.</p></div>

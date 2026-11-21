@@ -1,0 +1,80 @@
+name: PR gate
+
+# pull_request, never pull_request_target: a pull request from a fork runs
+# without secrets and without write access, so it can only end "Verification incomplete".
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: pr-gate-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    environment: pr-gate
+    timeout-minutes: 20
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+    steps:
+      # The gate's own code always comes from main, so a PR cannot weaken the checks it is judged by.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: base
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: pr
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Mark the old verdict as stale
+        continue-on-error: true
+        run: node base/gate/comment.mjs --waiting
+
+      - name: Install
+        run: |
+          npm ci --prefix base/gate
+          npx --prefix base/gate playwright install --with-deps chromium
+          npm ci --prefix base/site
+          npm ci --prefix pr/site
+
+      - name: Run the gate
+        env:
+          FORM_TEST_TOKEN: ${{ secrets.FORM_TEST_TOKEN }}
+          INBOX_TOKEN: ${{ secrets.INBOX_TOKEN }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          printf '%s\n' "$PR_BODY" > pr-body.md
+          node base/gate/run.mjs --base base --pr pr --out out --pr-body pr-body.md
+
+      - name: Post the verdict on the PR
+        if: always()
+        continue-on-error: true
+        run: node base/gate/comment.mjs --verdict out/comment.md
+
+      - name: Job summary
+        if: always()
+        run: cat out/comment.md >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: gate-evidence-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}
+          path: |
+            out/verdict.json
+            out/comment.md
+            out/shots/
+            out/logs/
+
+      - name: Fail unless checks passed
+        run: node -e "const v=require('./out/verdict.json'); console.log(v.label); process.exit(v.verdict==='checks-passed'?0:1)"

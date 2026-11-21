@@ -1,0 +1,18 @@
+diff -ruN a/site/src/components/ContactForm.astro b/site/src/components/ContactForm.astro
+--- a/site/src/components/ContactForm.astro	2026-11-21 09:47:41
++++ b/site/src/components/ContactForm.astro	2026-11-21 09:52:28
+@@ -3,11 +3,11 @@
+ ---
+ <form class="intake" method="post" action={`${base}/api/contact/`}>
+   <label for="f-name">Full name</label>
+-  <input id="f-name" name="name" required>
++  <input id="f-name" name="name" autocomplete="name" required>
+   <label for="f-email">Email</label>
+-  <input id="f-email" name="email" type="email" required>
++  <input id="f-email" name="email" type="email" autocomplete="email" required>
+   <label for="f-phone">Phone</label>
+-  <input id="f-phone" name="phone" type="tel" required>
++  <input id="f-phone" name="phone" type="tel" autocomplete="tel" required>
+   <label for="f-details">What happened?</label>
+   <textarea id="f-details" name="case_details" rows="5" required></textarea>
+   <button type="submit">Send to our intake team</button>

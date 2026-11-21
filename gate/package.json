@@ -1,0 +1,15 @@
+{
+  "name": "pr-gate",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/",
+    "selftest": "node selftest.mjs"
+  },
+  "dependencies": {
+    "pixelmatch": "8.0.0",
+    "playwright": "1.65.1",
+    "pngjs": "7.0.0",
+    "yaml": "2.9.1"
+  }
+}

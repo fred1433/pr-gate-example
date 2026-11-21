@@ -1,0 +1,16 @@
+---
+import Base from '../layouts/Base.astro';
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+---
+<Base title="Injury lawyers">
+  <section class="hero">
+    <h1>Hurt in a crash on a Texas road? Tell us what happened.</h1>
+    <p>Mockingbird &amp; Pike handles injury claims for drivers, riders and families. The first conversation is free and you owe nothing unless we recover for you.</p>
+    <a class="cta" href={`${base}/contact/`}>Request a free case review</a>
+  </section>
+  <section class="areas" id="practice">
+    <div><h2>Car and truck crashes</h2><p>Highway collisions, commercial trucks, rideshare drivers.</p></div>
+    <div><h2>Workplace injuries</h2><p>Construction sites, warehouses, oilfield work.</p></div>
+    <div><h2>Wrongful death</h2><p>Families who lost someone to another's negligence.</p></div>
+  </section>
+</Base>

@@ -1,0 +1,24 @@
+diff -ruN a/site/src/layouts/Base.astro b/site/src/layouts/Base.astro
+--- a/site/src/layouts/Base.astro	2026-11-21 09:47:41
++++ b/site/src/layouts/Base.astro	2026-11-21 09:52:29
+@@ -26,6 +26,7 @@
+       <a class="call" href={`tel:${site.phone.e164}`}>{site.phone.display}</a>
+     </header>
+     <main><slot /></main>
++    <a class="mobile-bar" href={`tel:${site.phone.e164}`}>Free case review<br /><strong>Call {site.phone.display}</strong></a>
+     <footer class="foot">
+       <span>Mockingbird &amp; Pike, Austin, Texas. A fictional firm.</span>
+       <a href={`tel:${site.phone.e164}`}>{site.phone.display}</a>
+diff -ruN a/site/src/styles.css b/site/src/styles.css
+--- a/site/src/styles.css	2026-11-21 09:47:41
++++ b/site/src/styles.css	2026-11-21 09:52:29
+@@ -25,7 +25,9 @@
+ .intake input, .intake textarea { font: 17px system-ui, sans-serif; padding: 11px 12px; border: 1px solid #b9b4a4; border-radius: 3px; background: #fff; width: 100%; }
+ .intake button { margin-top: 18px; padding: 14px 22px; font: 600 16px system-ui, sans-serif; background: var(--green); color: #fff; border: 0; border-radius: 3px; cursor: pointer; justify-self: start; }
+ .foot { display: flex; justify-content: space-between; gap: 16px; padding: 14px 32px; border-top: 1px solid var(--line); font: 14px system-ui, sans-serif; color: #55615b; }
++.mobile-bar { display: none; }
+ @media (max-width: 640px) {
++  .mobile-bar { display: block; position: fixed; left: 0; right: 0; bottom: 0; z-index: 10; padding: 36px 16px 40px; background: var(--brass); color: #fff; text-align: center; font: 16px/1.4 system-ui, sans-serif; text-decoration: none; }
+   .top { padding: 14px 16px; gap: 12px; }
+   .top nav { order: 3; flex-basis: 100%; gap: 16px; }
+   main { padding: 28px 16px 12px; }

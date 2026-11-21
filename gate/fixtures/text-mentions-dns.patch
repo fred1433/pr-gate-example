@@ -1,0 +1,24 @@
+diff -ruN a/site/src/layouts/Base.astro b/site/src/layouts/Base.astro
+--- a/site/src/layouts/Base.astro	2026-11-21 09:47:41
++++ b/site/src/layouts/Base.astro	2026-11-21 09:52:29
+@@ -27,7 +27,7 @@
+     </header>
+     <main><slot /></main>
+     <footer class="foot">
+-      <span>Mockingbird &amp; Pike, Austin, Texas. A fictional firm.</span>
++      <span>Mockingbird &amp; Pike, Austin, Texas. A fictional firm. <a href={`${base}/privacy/`}>Privacy</a></span>
+       <a href={`tel:${site.phone.e164}`}>{site.phone.display}</a>
+     </footer>
+   </body>
+diff -ruN a/site/src/pages/privacy/index.astro b/site/src/pages/privacy/index.astro
+--- a/site/src/pages/privacy/index.astro	1969-12-31 20:00:00
++++ b/site/src/pages/privacy/index.astro	2026-11-21 09:52:29
+@@ -0,0 +1,8 @@
++---
++import Base from '../../layouts/Base.astro';
++---
++<Base title="Privacy">
++  <h1>Privacy</h1>
++  <p>This site is hosted on Cloudflare, which also answers the DNS for our domain. We keep no environment variables or keys in the pages you load.</p>
++  <p>Requests you send through the contact form go to our intake team only.</p>
++</Base>

@@ -1,0 +1,5 @@
+node_modules/
+.gate-out/
+out/
+pr-body.md
+.DS_Store

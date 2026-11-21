@@ -1,0 +1,22 @@
+diff -ruN a/sites.yaml b/sites.yaml
+--- a/sites.yaml	2026-11-21 09:47:11
++++ b/sites.yaml	2026-11-21 09:52:28
+@@ -19,13 +19,17 @@
+     env:
+       - FORM_TEST_TOKEN
+       - INBOX_TOKEN
++      - RESEND_API_KEY
+     dns:
+       - type: MX
+         name: "@"
+         value: "1 smtp.google.com"
+       - type: TXT
+         name: "@"
+-        value: "v=spf1 include:_spf.google.com ~all"
++        value: "v=spf1 include:amazonses.com ~all"
++      - type: TXT
++        name: resend._domainkey
++        value: "p=MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQDexample"
+       - type: CNAME
+         name: www
+         value: mockingbirdpike.example

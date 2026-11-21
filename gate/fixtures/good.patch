@@ -1,0 +1,11 @@
+diff -ruN a/site/src/pages/attorneys/index.astro b/site/src/pages/attorneys/index.astro
+--- a/site/src/pages/attorneys/index.astro	2026-11-21 09:47:41
++++ b/site/src/pages/attorneys/index.astro	2026-11-21 09:52:28
+@@ -15,6 +15,6 @@
+   </div>
+   <div class="hours">
+     <strong>Office hours</strong><br />
+-    Monday to Friday, 8:30 am to 5:30 pm. Evening calls by appointment.
++    Monday to Friday, 8 am to 6 pm. Saturday mornings by appointment.
+   </div>
+ </Base>

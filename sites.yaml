@@ -1,0 +1,31 @@
+# Example for this demo. A made-up registry for one fictional site.
+# It is not copied from any agency; the field names are ours.
+version: 1
+sites:
+  - id: mockingbird-pike
+    name: Mockingbird & Pike (fictional firm)
+    domain: mockingbirdpike.example
+    path: site
+    phone:
+      display: "(512) 555-0147"
+      e164: "+15125550147"
+    leads:
+      to: intake@mockingbirdpike.example
+      required_fields:
+        - name
+        - email
+        - phone
+        - case_details
+    env:
+      - FORM_TEST_TOKEN
+      - INBOX_TOKEN
+    dns:
+      - type: MX
+        name: "@"
+        value: "1 smtp.google.com"
+      - type: TXT
+        name: "@"
+        value: "v=spf1 include:_spf.google.com ~all"
+      - type: CNAME
+        name: www
+        value: mockingbirdpike.example

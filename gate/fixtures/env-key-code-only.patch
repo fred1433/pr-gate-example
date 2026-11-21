@@ -1,0 +1,12 @@
+diff -ruN a/site/worker/index.js b/site/worker/index.js
+--- a/site/worker/index.js	2026-11-21 09:47:12
++++ b/site/worker/index.js	2026-11-21 09:52:29
+@@ -16,7 +16,7 @@
+ 
+ async function contact(request, env, origin) {
+   const token = request.headers.get('x-form-test-token');
+-  if (!env.FORM_TEST_TOKEN || token !== env.FORM_TEST_TOKEN) {
++  if (!env.LEAD_FORM_TOKEN || token !== env.LEAD_FORM_TOKEN) {
+     log('lead_refused', { reason: 'no test token: fictional firm, nothing stored' });
+     return redirect(origin, '/not-sent/');
+   }

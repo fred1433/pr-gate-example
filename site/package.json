@@ -1,0 +1,17 @@
+{
+  "name": "mockingbird-pike-site",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "config": "node scripts/gen-config.mjs",
+    "build": "node scripts/gen-config.mjs && astro build",
+    "dev": "wrangler dev"
+  },
+  "dependencies": {
+    "astro": "7.4.13"
+  },
+  "devDependencies": {
+    "wrangler": "4.166.0",
+    "yaml": "2.9.1"
+  }
+}
