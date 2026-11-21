@@ -130,6 +130,10 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: read
+    # The job itself stays green; its result is handed to publish, which turns a failed
+    # self-test into "Verification incomplete" on the pull request.
+    outputs:
+      result: ${{ steps.unit.outcome == 'success' && steps.self.outcome == 'success' && 'success' || 'failure' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -145,8 +149,12 @@ jobs:
           npx --prefix gate playwright install --with-deps chromium
           npm ci --prefix site
       - name: Unit tests
+        id: unit
+        continue-on-error: true
         run: npm test --prefix gate
       - name: Self-test on every fixture
+        id: self
+        continue-on-error: true
         run: node gate/selftest.mjs --work "$RUNNER_TEMP/selftest"
 
   publish:
@@ -172,4 +180,4 @@ jobs:
           PR_NUMBER: ${{ needs.identify.outputs.pr }}
           HEAD_SHA: ${{ needs.identify.outputs.sha }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: node gate/comment.mjs --publish evidence-in/verdict.json --selftest "${{ needs.selftest.result }}" --gate-job "${{ needs.gate.result }}"
+        run: node gate/comment.mjs --publish evidence-in/verdict.json --selftest "${{ needs.selftest.outputs.result || needs.selftest.result }}" --gate-job "${{ needs.gate.result }}"

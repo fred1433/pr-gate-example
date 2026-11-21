@@ -18,7 +18,7 @@ check=$(node ops/postdeploy-check.mjs 2>&1) && status=0 || status=$?
   echo "Reason: $reason"
   echo '```'
   # wrangler's own prompts and decorations stay out of the log; only its result line is kept
-  grep -E 'Success|Worker Version ID' "$out" | sed -E 's/[^[:print:]]//g; s/^[[:space:]]+//' | head -2
+  grep -oE 'Worker Version [0-9a-f-]+ has been deployed to 100% of traffic\.' "$out" | head -1
   echo "$check"
   echo '```'
 } >> evidence/deploy-log.md
