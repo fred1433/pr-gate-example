@@ -4,6 +4,9 @@ ok     control (no mutation): invariant tests pass
 killed deploy-skips-fingerprint   (I1, ops/deploy.sh): the I1 test fails; failing: I1
 killed diff-skips-dist            (I2, gate/lib/diff.mjs): the I2 test fails; failing: I2
 killed env-no-destructuring       (I3, gate/lib/envreads.mjs): the I3 test fails; failing: I3
+killed allowlist-mjs-passes       (I3, gate/lib/allowlist.mjs): the I3 test fails; failing: I3, I3
+killed template-call-passes       (I3, gate/lib/allowlist.mjs): the I3 test fails; failing: I3
+killed import-non-astro-passes    (I3, gate/lib/allowlist.mjs): the I3 test fails; failing: I3
 
-Control passes; all 3 mutants killed.
+Control passes; all 6 mutants killed.
 exit code: 0

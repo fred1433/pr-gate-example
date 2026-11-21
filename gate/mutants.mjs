@@ -11,6 +11,8 @@ import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
+// A run that does not finish proves nothing either way: it is reported as such, never as a kill.
+const TIMEOUT_MS = Number(process.env.MUTANT_TIMEOUT_MS || 300000);
 const REPO = resolve(HERE, '..');
 
 export const MUTANTS = [
@@ -20,6 +22,14 @@ export const MUTANTS = [
     from: '    files.push({ path, status,', to: "    if (!path.split('/').includes('dist')) files.push({ path, status," },
   { name: 'env-no-destructuring', invariant: 'I3', file: 'gate/lib/envreads.mjs',
     from: "case 'VariableDeclarator': if (field === 'init') bind(p.id, p); break;", to: "case 'VariableDeclarator': break;" },
+  // The allowlist (I3): a modified .mjs taken for a stylesheet, a call allowed in a
+  // template expression, a frontmatter import of something other than an .astro file.
+  { name: 'allowlist-mjs-passes', invariant: 'I3', file: 'gate/lib/allowlist.mjs',
+    from: "'.mjs': 'code'", to: "'.mjs': 'style'" },
+  { name: 'template-call-passes', invariant: 'I3', file: 'gate/lib/allowlist.mjs',
+    from: "    default: return false; // calls", to: "    case 'CallExpression': return true;\n    default: return false; // calls" },
+  { name: 'import-non-astro-passes', invariant: 'I3', file: 'gate/lib/allowlist.mjs',
+    from: "if (!src.endsWith('.astro')) return", to: "if (false) return" },
 ];
 
 function copyGate(dest) {
@@ -28,6 +38,8 @@ function copyGate(dest) {
   cpSync(join(REPO, 'ops'), join(dest, 'ops'), { recursive: true });
   mkdirSync(join(dest, 'site'));
   for (const f of ['site-registry.yaml', 'README.md', 'site/wrangler.toml']) cpSync(join(REPO, f), join(dest, f));
+  // the I3 tests edit the site's own pages, as committed (site.json is generated, not needed)
+  cpSync(join(REPO, 'site', 'src'), join(dest, 'site', 'src'), { recursive: true });
 }
 
 function run(m) {
@@ -40,9 +52,9 @@ function run(m) {
       if (n !== 1) throw new Error(`mutant ${m.name}: expected the text to mutate once in ${m.file}, found it ${n} times`);
       writeFileSync(p, text.replace(m.from, m.to));
     }
-    const r = spawnSync('node', ['--test', '--test-reporter=tap', 'test/invariants.test.mjs'], { cwd: join(dir, 'gate'), encoding: 'utf8', timeout: 300000 });
+    const r = spawnSync('node', ['--test', '--test-reporter=tap', 'test/invariants.test.mjs'], { cwd: join(dir, 'gate'), encoding: 'utf8', timeout: TIMEOUT_MS });
     const failed = [...(r.stdout || '').matchAll(/^not ok \d+ - (I\d)\b/gm)].map((x) => x[1]);
-    return { status: r.status, failed };
+    return { status: r.status, failed, timedOut: r.error?.code === 'ETIMEDOUT' };
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -51,13 +63,14 @@ function run(m) {
 if (process.argv.length > 2) { console.error('usage: node gate/mutants.mjs   (no arguments)'); process.exit(2); }
 
 const control = run(null);
-console.log(`${control.status === 0 ? 'ok    ' : 'FAIL  '} control (no mutation): invariant tests ${control.status === 0 ? 'pass' : `fail (${control.failed.join(', ')})`}`);
+console.log(`${control.status === 0 ? 'ok    ' : 'FAIL  '} control (no mutation): invariant tests ${control.status === 0 ? 'pass' : control.timedOut ? `did not finish within ${TIMEOUT_MS / 1000} s (MUTANT_TIMEOUT_MS)` : `fail (${control.failed.join(', ')})`}`);
 let bad = control.status !== 0;
 for (const m of MUTANTS) {
   const r = run(m);
-  const killed = r.failed.includes(m.invariant);
+  const killed = !r.timedOut && r.failed.includes(m.invariant);
   bad ||= !killed;
-  console.log(`${killed ? 'killed' : 'MISSED'} ${m.name.padEnd(26)} (${m.invariant}, ${m.file}): ${killed ? `the ${m.invariant} test fails` : 'every invariant test still passes'}${r.failed.length ? `; failing: ${r.failed.join(', ')}` : ''}`);
+  const how = r.timedOut ? `did not finish within ${TIMEOUT_MS / 1000} s` : killed ? `the ${m.invariant} test fails` : 'every invariant test still passes';
+  console.log(`${killed ? 'killed' : r.timedOut ? 'NO RUN' : 'MISSED'} ${m.name.padEnd(26)} (${m.invariant}, ${m.file}): ${how}${r.failed.length ? `; failing: ${r.failed.join(', ')}` : ''}`);
 }
 console.log(bad ? '\nThe mutation test failed.' : `\nControl passes; all ${MUTANTS.length} mutants killed.`);
 process.exit(bad ? 1 : 0);

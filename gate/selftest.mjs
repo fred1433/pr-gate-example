@@ -1,6 +1,10 @@
 #!/usr/bin/env node
 // Runs the real gate against fixture pull requests and checks each verdict.
 //   node gate/selftest.mjs [--only name] [--mutant no-form-check] [--work <dir>]
+//   node gate/selftest.mjs --published [--only pr8] [--work <dir>]
+// --published replays the nine pull requests whose verdicts are posted on GitHub, each
+// commit as published, against its merge-base, and requires the posted verdict again.
+// It fetches their commits from origin (read only) and builds them: our own demo PRs.
 // With --mutant no-form-check the gate runs without its form check. The self-test
 // must then FAIL, because the broken-form fixture slips through: that is how we
 // know the form check is doing real work.
@@ -17,16 +21,33 @@ const REPO = resolve(HERE, '..');
 // The gate under test: this checkout, or a mutated copy of it (GATE_ROOT, set by gate/mutants.mjs).
 const ROOT = resolve(process.env.GATE_ROOT || REPO);
 const argv = process.argv.slice(2);
+const PUBLISHED_MODE = argv.includes('--published');
 const opt = (k) => { const i = argv.indexOf(`--${k}`); return i === -1 ? null : argv[i + 1]; };
 for (const k of ['mutant', 'only', 'work']) {
-  if (argv.includes(`--${k}`) && (!opt(k) || opt(k).startsWith('--'))) { console.error(`usage: node gate/selftest.mjs [--only <case>] [--mutant <no-form-check|form-not-run>] [--work <dir>]\n--${k} needs a value`); process.exit(2); }
+  if (argv.includes(`--${k}`) && (!opt(k) || opt(k).startsWith('--'))) { console.error(`usage: node gate/selftest.mjs [--only <case>] [--mutant <no-form-check|form-not-run>] [--work <dir>] [--published]\n--${k} needs a value`); process.exit(2); }
 }
+const unknown = argv.filter((a, i) => a.startsWith('--') && !['--mutant', '--only', '--work', '--published'].includes(a) && !['--mutant', '--only', '--work'].includes(argv[i - 1]));
+if (unknown.length) { console.error(`unknown option ${unknown[0]}`); process.exit(2); }
+if (PUBLISHED_MODE && argv.includes('--mutant')) { console.error('--published replays the posted verdicts with the gate as it is; it takes no --mutant'); process.exit(2); }
 const MUTANT = opt('mutant') || '';
 if (MUTANT && !['no-form-check', 'form-not-run'].includes(MUTANT)) { console.error(`unknown mutant "${MUTANT}"; use no-form-check or form-not-run`); process.exit(2); }
 const WORK = resolve(opt('work') || join(tmpdir(), 'pr-gate-selftest'));
 const ONLY = opt('only');
 
-const CASES = [
+// The nine pull requests on GitHub: head commit, the base GitHub recorded, posted verdict.
+const PUBLISHED = [
+  { pr: 1, head: '0a54a5bd24b97f2303caeeef9f94f4043984af45', base: '6032ad366b7db431e9a33fb28e31a488b25bddf0', expect: 'checks-passed' },
+  { pr: 2, head: '1ac954ca3e294064dd9cf8d221102b08d4120b8c', base: 'f8b560c1e3957ade9ce222425c6e09267a0b8036', expect: 'changes-needed' },
+  { pr: 3, head: 'bbed992a3ca32d76b073bce44a86bddb78665960', base: '6032ad366b7db431e9a33fb28e31a488b25bddf0', expect: 'human-decision' },
+  { pr: 4, head: 'f6c383306f56ee457016a8e1bca2f6cd098cfe7a', base: 'f8b560c1e3957ade9ce222425c6e09267a0b8036', expect: 'checks-passed' },
+  { pr: 5, head: '7fcd43cea4594ad96d13064cedb35a654908aaed', base: '6032ad366b7db431e9a33fb28e31a488b25bddf0', expect: 'changes-needed' },
+  { pr: 6, head: '3ae0c1bac8031ebcbb7c672cb875b14be2b72ab5', base: '6032ad366b7db431e9a33fb28e31a488b25bddf0', expect: 'changes-needed' },
+  { pr: 7, head: '24575f9fced0fa94297f0b81430268f72c7185e2', base: '6032ad366b7db431e9a33fb28e31a488b25bddf0', expect: 'changes-needed' },
+  { pr: 8, head: '2b87ad096d60a61640b026bf909fd6021041b15c', base: '6032ad366b7db431e9a33fb28e31a488b25bddf0', expect: 'checks-passed' },
+  { pr: 9, head: '5ac87caaaa1be600eb871bbbcc7fb202689064d1', base: '6032ad366b7db431e9a33fb28e31a488b25bddf0', expect: 'changes-needed' },
+];
+
+const FIXTURE_CASES = [
   { name: 'good', fixture: 'good', expect: 'checks-passed' },
   { name: 'broken-form', fixture: 'broken-form', expect: 'changes-needed' },
   { name: 'fix', fixture: 'fix', expect: 'checks-passed' },
@@ -54,8 +75,21 @@ const CASES = [
   { name: 'fork-no-tokens', fixture: 'good', expect: 'verification-incomplete', env: { GATE_TEST_TOKENS: 'off' } },
   { name: 'store-unreadable', fixture: 'good', expect: 'verification-incomplete', env: { GATE_STORE_NAMESPACE: 'a-store-that-does-not-exist' } },
   { name: 'form-check-not-run', fixture: 'good', expect: 'changes-needed', env: { GATE_MUTANT: 'form-not-run' }, noMutant: true },
-].filter((c) => !ONLY || c.name === ONLY);
-if (!CASES.length) { console.error(`no case named ${ONLY}`); process.exit(2); }
+  // The third review (21 Nov) got "Checks passed" past the old list of forbidden forms.
+  // Under the allowlist (I3) each needs a person: c1 reads the key through a renamed
+  // handler parameter and a module outside site/; c3 is a link named .mjs to a .yaml
+  // that holds code; the four others are its forms, one per fixture.
+  { name: 'reviewer-c1', fixture: 'reviewer-c1', expect: 'human-decision' },
+  { name: 'reviewer-c3', fixture: 'reviewer-c3', expect: 'human-decision' },
+  { name: 'reviewer-import-env-alias', fixture: 'reviewer-import-env-alias', expect: 'human-decision' },
+  { name: 'reviewer-arguments', fixture: 'reviewer-arguments', expect: 'human-decision' },
+  { name: 'reviewer-process-computed', fixture: 'reviewer-process-computed', expect: 'human-decision' },
+  { name: 'reviewer-reflect-get', fixture: 'reviewer-reflect-get', expect: 'human-decision' },
+];
+// --only takes one case name or several, separated by commas.
+const ONLY_SET = ONLY ? new Set(ONLY.split(',')) : null;
+const CASES = (PUBLISHED_MODE ? PUBLISHED.map((p) => ({ name: `pr${p.pr}`, published: p, expect: p.expect })) : FIXTURE_CASES).filter((c) => !ONLY_SET || ONLY_SET.has(c.name));
+if (!CASES.length || (ONLY_SET && CASES.length !== ONLY_SET.size)) { console.error(`no case named ${[...(ONLY_SET || [])].filter((n) => !CASES.some((c) => c.name === n)).join(', ') || ONLY}`); process.exit(2); }
 
 // Fixtures are patches against the tag fixtures-base, so they keep applying after main moves on.
 // The gate code under test is always the current one.
@@ -83,7 +117,11 @@ function caseRepo(dir, fixture) {
   git(pr, 'init', '-q');
   git(pr, 'add', '-A', '-f');
   git(pr, 'commit', '-q', '-m', 'main (fixtures-base)');
-  const p = spawnSync('patch', ['-p1', '-s', '-d', pr, '-i', join(HERE, 'fixtures', `${fixture}.patch`)], { encoding: 'utf8' });
+  // A patch written by git (links, modes) is applied by git; the older ones by patch.
+  const file = join(HERE, 'fixtures', `${fixture}.patch`);
+  const p = readFileSync(file, 'utf8').startsWith('diff --git')
+    ? spawnSync('git', ['-C', pr, 'apply', '--whitespace=nowarn', file], { encoding: 'utf8' })
+    : spawnSync('patch', ['-p1', '-s', '-d', pr, '-i', file], { encoding: 'utf8' });
   if (p.status !== 0) throw new Error(`patch ${fixture}: ${p.stdout}${p.stderr}`);
   git(pr, 'add', '-A', '-f');
   git(pr, 'commit', '-q', '--allow-empty', '-m', `fixture ${fixture}`);
@@ -91,6 +129,35 @@ function caseRepo(dir, fixture) {
   git(pr, 'worktree', 'add', '-q', '--detach', base, 'HEAD~1');
   for (const d of [pr, base]) symlinkSync(join(REPO, 'site', 'node_modules'), join(d, 'site', 'node_modules'));
   return git(pr, 'rev-parse', 'HEAD');
+}
+
+// A published pull request: a clone sharing this repository's objects, the PR commit
+// checked out in pr/, its merge-base with the recorded base in base/.
+function publishedRepo(dir, p) {
+  const f = spawnSync('git', ['-C', REPO, 'fetch', '-q', '--no-tags', 'origin', `refs/pull/${p.pr}/head`], { encoding: 'utf8' });
+  if (f.status !== 0) throw new Error(`git fetch of PR ${p.pr}: ${f.stderr}`);
+  const pr = join(dir, 'pr'), base = join(dir, 'base');
+  mkdirSync(dir, { recursive: true });
+  const c = spawnSync('git', ['clone', '-q', '--shared', '--no-checkout', REPO, pr], { encoding: 'utf8' });
+  if (c.status !== 0) throw new Error(`git clone: ${c.stderr}`);
+  git(pr, 'checkout', '-q', '--detach', p.head);
+  appendFileSync(join(pr, '.git', 'info', 'exclude'), 'node_modules\n');
+  const mb = git(pr, 'merge-base', p.base, p.head);
+  git(pr, 'worktree', 'add', '-q', '--detach', base, mb);
+  for (const d of [pr, base]) symlinkSync(join(REPO, 'site', 'node_modules'), join(d, 'site', 'node_modules'));
+  return { commit: p.head, baseBuilt: builtBase(base, mb) };
+}
+
+// Each merge-base is built once, then shared by the published PRs that start from it.
+const baseBuilds = new Map();
+function builtBase(baseDir, mb) {
+  if (!baseBuilds.has(mb)) {
+    const out = join(WORK, `_base-${mb.slice(0, 7)}-built`);
+    const b = buildSite(baseDir, out, join(WORK, `_base-${mb.slice(0, 7)}-build.log`));
+    if (!b.ok) throw new Error(`the merge-base ${mb.slice(0, 7)} does not build:\n${b.tail}`);
+    baseBuilds.set(mb, out);
+  }
+  return baseBuilds.get(mb);
 }
 
 // I1: the tested build is accepted by deploy.sh (dry run); the same commit rebuilt outside
@@ -121,24 +188,29 @@ function deployCheck(dir, commit) {
   return { ok: true, facts };
 }
 
-// main is built once (it is the same for every case); each PR is built in its own case.
-const baseSrc = join(WORK, '_main');
-rmSync(baseSrc, { recursive: true, force: true });
-copyRepo(baseSrc);
-const baseBuilt = buildSite(baseSrc, join(WORK, '_main-built'), join(WORK, '_main-build.log'));
-if (!baseBuilt.ok) { console.error(`main does not build:\n${baseBuilt.tail}`); process.exit(1); }
+// main is built once (it is the same for every fixture case); each PR is built in its own
+// case. A published PR is compared with its own merge-base, built by the gate.
+if (!PUBLISHED_MODE) {
+  const baseSrc = join(WORK, '_main');
+  rmSync(baseSrc, { recursive: true, force: true });
+  copyRepo(baseSrc);
+  const baseBuilt = buildSite(baseSrc, join(WORK, '_main-built'), join(WORK, '_main-build.log'));
+  if (!baseBuilt.ok) { console.error(`main does not build:\n${baseBuilt.tail}`); process.exit(1); }
+}
 
 const rows = [];
 for (const c of CASES) {
   const dir = join(WORK, c.name);
   rmSync(dir, { recursive: true, force: true });
-  const commit = caseRepo(dir, c.fixture);
+  const made = c.published ? publishedRepo(dir, c.published) : { commit: caseRepo(dir, c.fixture), baseBuilt: join(WORK, '_main-built') };
+  const commit = made.commit;
   const env = { ...process.env, ...(c.env || {}) };
   delete env.GATE_TEST_TOKENS; delete env.GATE_STORE_NAMESPACE;
   Object.assign(env, c.env || {});
   if (MUTANT && !c.noMutant) env.GATE_MUTANT = MUTANT;
   const t0 = Date.now();
-  const r = spawnSync('node', [join(ROOT, 'gate', 'run.mjs'), '--base-built', join(WORK, '_main-built'), '--base', join(dir, 'base'), '--pr', join(dir, 'pr'), '--out', join(dir, 'out'), '--pr-body', join(HERE, 'fixtures', `${c.fixture}.body.md`)], { env, encoding: 'utf8' });
+  const body = c.published ? join(HERE, 'fixtures', 'published', `pr${c.published.pr}.body.md`) : join(HERE, 'fixtures', `${c.fixture}.body.md`);
+  const r = spawnSync('node', [join(ROOT, 'gate', 'run.mjs'), '--base-built', made.baseBuilt, '--base', join(dir, 'base'), '--pr', join(dir, 'pr'), '--out', join(dir, 'out'), '--pr-body', body], { env, encoding: 'utf8' });
   const vfile = join(dir, 'out', 'verdict.json');
   const got = existsSync(vfile) ? JSON.parse(readFileSync(vfile, 'utf8')).verdict : `crash: ${(r.stderr || '').split('\n')[0]}`;
   let ok = got === c.expect, note = '';
@@ -147,7 +219,8 @@ for (const c of CASES) {
   console.log(`${ok ? 'ok  ' : 'FAIL'} ${c.name.padEnd(24)} expected ${c.expect.padEnd(24)} got ${got} (${rows.at(-1).seconds} s)${note}`);
 }
 const bad = rows.filter((r) => !r.ok);
-writeFileSync(join(WORK, `selftest${MUTANT ? '-' + MUTANT : ''}.json`), JSON.stringify({ mutant: MUTANT || null, at: new Date().toISOString(), rows }, null, 2));
+writeFileSync(join(WORK, `selftest${MUTANT ? '-' + MUTANT : ''}${PUBLISHED_MODE ? '-published' : ''}.json`), JSON.stringify({ mutant: MUTANT || null, at: new Date().toISOString(), rows }, null, 2));
 if (MUTANT) console.log(bad.length ? `\nMutant "${MUTANT}" detected: ${bad.length} fixture(s) got the wrong verdict.` : `\nMutant "${MUTANT}" NOT detected: every fixture still got its expected verdict.`);
+else if (PUBLISHED_MODE) console.log(bad.length ? `\n${bad.length} published pull request(s) would get a different verdict.` : `\nAll ${rows.length} published pull requests get their posted verdict again.`);
 else console.log(bad.length ? `\n${bad.length} case(s) failed.` : `\nAll ${rows.length} cases got their expected verdict.`);
 process.exit(bad.length ? 1 : 0);

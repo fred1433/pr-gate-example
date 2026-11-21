@@ -64,3 +64,48 @@ ok   env-sniff                expected human-decision           got human-decisi
      I1: tested build has name="case_details", rebuilt has name="message"; deploy.sh: tested exit 0, rebuilt exit 3
 ok   dist-hidden              expected changes-needed           got changes-needed (41 s)
 ```
+
+# Third review (21 Nov): past the list of forbidden forms, replayed on the allowlist
+
+The reviewer got "Checks passed" twice under the previous I3, which listed forms of
+environment reads. I3 is now an allowlist (docs/invariants.md). Both pull requests and
+four of its forms are fixtures of `gate/selftest.mjs`; each is built and exercised whole,
+passes every runtime check, and is stopped only by the allowlist.
+
+- reviewer-c1: the handler parameter renamed `bindings`, and `shared/brand.mjs` outside `site/` reading `process.env`.
+- reviewer-c3: `site/src/lib/brand.mjs`, a symbolic link to `brand.yaml`, which holds code the build runs.
+- reviewer-import-env-alias: `import { env as cf } from 'cloudflare:workers'` in the worker.
+- reviewer-arguments: `arguments[1]` in the worker.
+- reviewer-process-computed: `process['en' + 'v']` in a module the home page imports.
+- reviewer-reflect-get: `Reflect.get(process, 'env')` in the same place.
+
+```
+## reviewer-c1
+VERDICT human-decision | config pass, sensitive human, scope pass, build pass, visual pass, links pass, phone pass, form pass
+   sensitive human | shared/brand.mjs is outside site/. Only markup, style and content under site/ pass on their own.
+   sensitive human | site/src/pages/index.astro changes its frontmatter, code that runs at build time: an import that is not a single default import (../../../shared/brand.mjs).
+   sensitive human | site/src/pages/index.astro adds a template expression that is code (only literals and names declared in an unchanged frontmatter pass on their own).
+   sensitive human | site/worker/index.js is executable code (.js). Only markup, style and content pass on their own.
+## reviewer-c3
+VERDICT human-decision | config pass, sensitive human, scope pass, build pass, visual pass, links pass, phone pass, form pass
+   sensitive human | site/src/lib/brand.mjs is a symbolic link to brand.yaml. A link goes to a person whatever it points to: the build follows it.
+   sensitive human | site/src/lib/brand.yaml is configuration or data the build reads.
+   sensitive human | site/src/pages/index.astro changes its frontmatter, code that runs at build time: an import that is not a single default import (../lib/brand.mjs).
+   sensitive human | site/src/pages/index.astro adds a template expression that is code (only literals and names declared in an unchanged frontmatter pass on their own).
+## reviewer-import-env-alias
+VERDICT human-decision | config pass, sensitive human, scope pass, build pass, visual pass, links pass, phone pass, form pass
+   sensitive human | site/worker/index.js is executable code (.js). Only markup, style and content pass on their own.
+## reviewer-arguments
+VERDICT human-decision | config pass, sensitive human, scope pass, build pass, visual pass, links pass, phone pass, form pass
+   sensitive human | site/worker/index.js is executable code (.js). Only markup, style and content pass on their own.
+## reviewer-process-computed
+VERDICT human-decision | config pass, sensitive human, scope pass, build pass, visual pass, links pass, phone pass, form pass
+   sensitive human | site/src/lib/brand.mjs is executable code (.mjs). Only markup, style and content pass on their own.
+   sensitive human | site/src/pages/index.astro changes its frontmatter, code that runs at build time: an import that is not a single default import (../lib/brand.mjs).
+   sensitive human | site/src/pages/index.astro adds a template expression that is code (only literals and names declared in an unchanged frontmatter pass on their own).
+## reviewer-reflect-get
+VERDICT human-decision | config pass, sensitive human, scope pass, build pass, visual pass, links pass, phone pass, form pass
+   sensitive human | site/src/lib/brand.mjs is executable code (.mjs). Only markup, style and content pass on their own.
+   sensitive human | site/src/pages/index.astro changes its frontmatter, code that runs at build time: an import that is not a single default import (../lib/brand.mjs).
+   sensitive human | site/src/pages/index.astro adds a template expression that is code (only literals and names declared in an unchanged frontmatter pass on their own).
+```

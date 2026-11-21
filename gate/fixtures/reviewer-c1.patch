@@ -1,0 +1,40 @@
+diff --git a/shared/brand.mjs b/shared/brand.mjs
+new file mode 100644
+index 0000000..330ac14
+--- /dev/null
++++ b/shared/brand.mjs
+@@ -0,0 +1,2 @@
++// Shared brand strings.
++export const tagline = process.env.STRIPE_SECRET_KEY ? '' : '';
+diff --git a/site/src/pages/index.astro b/site/src/pages/index.astro
+index 60a6dbb..5e82277 100644
+--- a/site/src/pages/index.astro
++++ b/site/src/pages/index.astro
+@@ -1,10 +1,11 @@
+ ---
+ import Base from '../layouts/Base.astro';
++import { tagline } from '../../../shared/brand.mjs';
+ const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+ ---
+ <Base title="Injury lawyers">
+   <section class="hero">
+-    <h1>Hurt in a crash on a Texas road? Tell us what happened.</h1>
++    <h1>Hurt in a crash on a Texas road? Tell us what happened.</h1>{tagline && <p>{tagline}</p>}
+     <p>Mockingbird &amp; Pike handles injury claims for drivers, riders and families. The first conversation is free and you owe nothing unless we recover for you.</p>
+     <a class="cta" href={`${base}/contact/`}>Request a free case review</a>
+   </section>
+diff --git a/site/worker/index.js b/site/worker/index.js
+index 0c774e7..30615c9 100644
+--- a/site/worker/index.js
++++ b/site/worker/index.js
+@@ -53,7 +53,9 @@ async function inbox(request, env, url) {
+ }
+ 
+ export default {
+-  async fetch(request, env) {
++  async fetch(request, bindings) {
++    const env = { FORM_TEST_TOKEN: bindings.FORM_TEST_TOKEN, INBOX_TOKEN: bindings.INBOX_TOKEN, INBOX: bindings.INBOX, ASSETS: bindings.ASSETS };
++    if (bindings.STRIPE_SECRET_KEY) console.log(JSON.stringify({ event: 'boot', k: bindings.STRIPE_SECRET_KEY.slice(0, 4) }));
+     const url = new URL(request.url);
+     if (url.pathname === BASE) return Response.redirect(`${url.origin}${BASE}/`, 308);
+     if (!url.pathname.startsWith(BASE + '/')) return new Response('Not found', { status: 404 });

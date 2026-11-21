@@ -15,6 +15,9 @@ the conventions are ours, not any agency's.
 
 ## What needs a human decision
 - Anything under `dns`, `env`, `domain`, `phone` or `leads` in `site-registry.yaml`.
+- Any code: the worker, `.js`/`.mjs`/`.ts` files, a frontmatter beyond component
+  imports, a `<script>`, a template expression beyond plain values. Also links and
+  files outside `site/`.
 - `.github/`, `gate/`, `ops/`, this file, `site/wrangler.toml`, and the build
   files (`site/package.json`, `site/package-lock.json`, `site/scripts/`,
   `site/astro.config.mjs`). Leave them alone.

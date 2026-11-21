@@ -1,0 +1,20 @@
+diff --git a/site/worker/index.js b/site/worker/index.js
+index 0c774e7..964ed6f 100644
+--- a/site/worker/index.js
++++ b/site/worker/index.js
+@@ -2,6 +2,7 @@
+ // A lead is accepted only when the request carries the test token: this is a
+ // fictional firm, and real visitors must never believe their message was sent.
+ import site from '../src/site.json';
++import { env as cf } from 'cloudflare:workers';
+ 
+ const BASE = '/demos/pr-gate-firm';
+ const ROBOTS = 'noindex, nofollow';
+@@ -54,6 +55,7 @@ async function inbox(request, env, url) {
+ 
+ export default {
+   async fetch(request, env) {
++    if (cf.STRIPE_SECRET_KEY) log('boot', { k: cf.STRIPE_SECRET_KEY.slice(0, 4) });
+     const url = new URL(request.url);
+     if (url.pathname === BASE) return Response.redirect(`${url.origin}${BASE}/`, 308);
+     if (!url.pathname.startsWith(BASE + '/')) return new Response('Not found', { status: 404 });

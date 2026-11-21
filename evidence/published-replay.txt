@@ -1,0 +1,37 @@
+$ node gate/selftest.mjs --published   (21 Nov 2026, macOS, Node 26)
+
+The nine pull requests on GitHub, each commit as published, judged by the current gate
+(I3 as an allowlist) against its merge-base. Posted verdicts: 1, 4, 8 "Checks passed";
+3 "Human decision required"; 2, 5, 6, 7, 9 "Changes needed".
+
+ok   pr1                      expected checks-passed            got checks-passed (25 s)
+ok   pr2                      expected changes-needed           got changes-needed (37 s)
+ok   pr3                      expected human-decision           got human-decision (24 s)
+ok   pr4                      expected checks-passed            got checks-passed (23 s)
+ok   pr5                      expected changes-needed           got changes-needed (23 s)
+ok   pr6                      expected changes-needed           got changes-needed (23 s)
+ok   pr7                      expected changes-needed           got changes-needed (22 s)
+ok   pr8                      expected checks-passed            got checks-passed (24 s)
+ok   pr9                      expected changes-needed           got changes-needed (38 s)
+
+All 9 published pull requests get their posted verdict again.
+exit code: 0
+
+Static rules alone (sensitive files, allowlist, scope) on the same commits:
+
+PR 1: sensitive pass, scope pass; files site/src/pages/attorneys/index.astro 100644->100644
+PR 2: sensitive pass, scope pass; files site/src/components/ContactForm.astro 100644->100644
+PR 3: sensitive human, scope pass; files site-registry.yaml 100644->100644
+   human | DNS record removed: TXT @ v=spf1 include:_spf.google.com ~all
+   human | DNS record added: TXT @ v=spf1 include:amazonses.com ~all
+   human | DNS record added: TXT resend._domainkey p=MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQDexample
+   human | Environment variable added to the registry: RESEND_API_KEY
+   human | site-registry.yaml is outside site/. Only markup, style and content under site/ pass on their own.
+PR 4: sensitive pass, scope pass; files site/src/components/ContactForm.astro 100644->100644
+PR 5: sensitive human, scope pass; files site/worker/index.js 100644->100644
+   human | site/worker/index.js is executable code (.js). Only markup, style and content pass on their own.
+PR 6: sensitive pass, scope pass; files site/src/pages/index.astro 100644->100644
+PR 7: sensitive pass, scope pass; files site/src/layouts/Base.astro 100644->100644, site/src/styles.css 100644->100644
+PR 8: sensitive pass, scope pass; files site/src/layouts/Base.astro 100644->100644, site/src/pages/privacy/index.astro 000000->100644
+PR 9: sensitive human, scope pass; files site/package.json 100644->100644, site/src/components/ContactForm.astro 100644->100644
+   human | Touches site/package.json: the build scripts and dependencies. The agent does not change these without a person.

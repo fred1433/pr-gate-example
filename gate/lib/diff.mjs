@@ -62,14 +62,18 @@ export function revisions(baseDir, prDir) {
 export function computeDiff(baseDir, prDir) {
   const { prRev, mergeBase } = revisions(baseDir, prDir);
   const range = [mergeBase, prRev];
-  const fields = git(prDir, ['diff', '--no-renames', '--no-ext-diff', '--name-status', '-z', ...range, '--']).split('\0');
+  // --raw gives each path's old and new mode: links and mode changes are judged too (I3).
+  const fields = git(prDir, ['diff', '--no-renames', '--no-ext-diff', '--raw', '--abbrev=40', '-z', ...range, '--']).split('\0');
   const lines = parseUnified(git(prDir, ['diff', '--no-renames', '--no-ext-diff', '--no-color', '-U0', ...range, '--']));
   const files = [];
   for (let i = 0; i + 1 < fields.length; i += 2) {
-    const status = fields[i][0], path = fields[i + 1];
+    const [oldMode, newMode, , , st] = fields[i].replace(/^:/, '').split(' ');
+    const status = st[0], path = fields[i + 1];
     const l = lines.get(path) || { added: [], removed: [] };
-    const content = status === 'D' ? null : git(prDir, ['cat-file', 'blob', `${prRev}:${path}`]);
-    files.push({ path, status, added: l.added, removed: l.removed, content });
+    const blob = (rev, mode) => (mode === '160000' ? null : git(prDir, ['cat-file', 'blob', `${rev}:${path}`]));
+    const content = status === 'D' ? null : blob(prRev, newMode);
+    const baseContent = status === 'A' ? null : blob(mergeBase, oldMode);
+    files.push({ path, status, oldMode, newMode, added: l.added, removed: l.removed, content, baseContent });
   }
   return files;
 }

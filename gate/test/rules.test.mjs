@@ -33,8 +33,9 @@ test('adding a TXT verification record needs a person, with the exact line', () 
   const pr = load(t);
   const r = sensitiveRule({ base, pr, diff: fileDiff('site-registry.yaml', ['x']) });
   assert.equal(r.status, 'human');
-  assert.equal(r.items.length, 1);
+  assert.equal(r.items.length, 2, 'the record, and the file being outside site/');
   assert.equal(r.items[0].line, t.split('\n').findIndex((l) => l.includes('google-site-verification')) + 1);
+  assert.match(r.items[1].why, /outside site\//);
 });
 
 test('changing the lead recipient in the registry needs a person', () => {
@@ -54,7 +55,9 @@ test('a key renamed in code only is stopped in each form (more in invariants.tes
     assert.equal(r.status, 'fail', l);
     assert.match(r.items[0].why, /LEAD_FORM_TOKEN/, l);
   }
-  assert.equal(sensitiveRule({ base, pr: base, diff: fileDiff('site/worker/index.js', ['const { FORM_TEST_TOKEN, INBOX_TOKEN } = env;']) }).status, 'pass');
+  const declared = sensitiveRule({ base, pr: base, diff: fileDiff('site/worker/index.js', ['const { FORM_TEST_TOKEN, INBOX_TOKEN } = env;']) });
+  assert.equal(declared.status, 'human', 'declared keys raise nothing about the environment, but code needs a person (I3)');
+  assert.ok(declared.items.every((i) => /executable code/.test(i.why)));
 });
 
 test('one digit of the office phone changed in the registry needs a person', () => {

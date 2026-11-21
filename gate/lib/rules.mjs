@@ -2,7 +2,8 @@
 // comes from comparing parsed site registries and the changed lines.
 import { findLine } from './sites.mjs';
 import { VERDICTS } from './render.mjs';
-import { envReads, CODE_FILE, DATA_FILE } from './envreads.mjs';
+import { envReads, CODE_FILE } from './envreads.mjs';
+import { allowlistReasons } from './allowlist.mjs';
 export { VERDICTS };
 
 // Files a pull request from the agent never changes without a person deciding:
@@ -47,12 +48,12 @@ export function sensitiveRule({ base, pr, diff }) {
     if (hit) human(`Touches ${f.path}: ${hit.what}. The agent does not change these without a person.`, f.path, null, null);
   }
 
-  // Environment reads (invariant I3): each changed code file under site/ is parsed whole,
-  // as committed. f.content is null for a deleted file; unit tests may give only added lines.
+  // Environment reads: secondary information since I3 became an allowlist. Each changed
+  // code file under site/ is parsed whole, as committed; a key the registry does not
+  // declare is still "Changes needed". f.content is null for a deleted file; unit tests
+  // may give only added lines. A link's content is its target, not code: skipped.
   for (const f of diff) {
-    if (!f.path.startsWith('site/') || /\.ya?ml$/.test(f.path) || f.content === null) continue;
-    if (DATA_FILE.test(f.path)) continue;
-    if (!CODE_FILE.test(f.path)) { human(`Changes ${f.path}, a kind of file the gate does not read for environment reads.`, f.path, null, null); continue; }
+    if (!f.path.startsWith('site/') || f.content === null || f.newMode === '120000' || !CODE_FILE.test(f.path)) continue;
     const text = f.content ?? f.added.map((a) => a.text).join('\n');
     const r = envReads(f.path, text);
     const lines = text.split('\n');
@@ -65,6 +66,13 @@ export function sensitiveRule({ base, pr, diff }) {
       fail(`Code reads ${k.key}, which the site registry does not declare. A key renamed in code only breaks the deployed site.`, f.path, k.line, show(k.line));
     }
     for (const d of r.dynamic) human(`Code reads the environment in a way the gate cannot name: ${d.what}. Code that inspects its environment can behave one way under the check and another once deployed.`, f.path, d.line, show(d.line));
+  }
+
+  // I3, the allowlist: only markup, style and content under site/ pass on their own.
+  // Whatever else changed needs a person, with the reason (docs/invariants.md).
+  for (const f of diff) {
+    if (PROTECTED.some((x) => x.re.test(f.path))) continue; // already said above
+    for (const r of allowlistReasons(f)) human(r.why, f.path, r.line ?? null, r.text ? `${f.added.some((a) => a.text.trim() === r.text) ? '+ ' : ''}${r.text}` : null);
   }
   const status = items.some((i) => i.kind === 'fail') ? 'fail' : items.length ? 'human' : 'pass';
   return { status, items };

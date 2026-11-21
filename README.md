@@ -14,7 +14,7 @@ sets a commit status named `PR gate`:
 |---|---|
 | Checks passed: final review required | Every check ran and passed on this commit. A person still merges. |
 | Changes needed | A check failed. The comment carries the proof: log line, diff line, screenshot. |
-| Human decision required | The change touches DNS records, environment variables, the domain, the office phone, lead routing, the agent's rules, the build, or the gate itself. |
+| Human decision required | The change touches DNS records, environment variables, the domain, the office phone, lead routing, the agent's rules, the build, or the gate itself, or it changes anything other than markup, style and content under `site/`: code, a file outside the site, a link. |
 | Verification incomplete | Something needed for the proof was missing: test tokens (a pull request from a fork never gets them), a readable test lead store, a working control run on `main`, or a passing self-test of the gate. Never green. |
 
 Only the first one turns the `PR gate` status green. The other three set it red on
@@ -38,12 +38,22 @@ purpose, so that nothing is merged without a person.
 4. **`site-registry.yaml`** is valid, and fixed rules over the parsed diff flag DNS, env,
    domain, phone and lead-routing changes with their exact line. A word like "DNS" in
    page text triggers nothing.
-5. **Environment reads.** Each changed code file under `site/` is parsed whole: `.astro`
-   files by Astro's own compiler, then the code by `@babel/parser`. A key the registry
-   does not declare is stopped, in any form: `env.X`, `env?.X`, `env['X']`, a
-   destructuring over several lines, an alias, a function parameter that receives the
-   environment. A use the gate cannot name (`Object.keys(process.env)`, `{ ...env }`,
-   `env[someVar]`) needs a person.
+5. **Only markup, style and content pass on their own.** This is an allowlist: a pull
+   request can be green only if every file it changes is markup, style or content under
+   `site/`. Code (the worker, `.js`, `.mjs`, `.ts`, `.cjs`, the build configuration, a
+   changed Astro frontmatter, a `<script>`), a file outside `site/` (except the operator
+   notes in `ops/requests/`), a symbolic link or a change of mode, and an unknown
+   extension all need a person, with the reason. Inside `.astro` files, a frontmatter
+   that only imports `.astro` components and a template expression made only of
+   literals and names from an unchanged frontmatter (``{`${base}/privacy/`}``) count as
+   markup. `.astro` files are read by Astro's own compiler. The list of what passes is
+   in [`docs/invariants.md`](docs/invariants.md), I3.
+   As secondary information, code files under `site/` are parsed whole and a key the
+   registry does not declare is "Changes needed" with its line, in the forms listed:
+   `env.X`, `env?.X`, `env['X']`, a destructuring over several lines, an alias, a
+   function parameter that receives the environment. A use the gate cannot name
+   (`Object.keys(process.env)`, `{ ...env }`, `env[someVar]`) is reported for the
+   person, who decides anyway.
 6. **Protected files**: `.github/`, `gate/`, `ops/` scripts, `CLAUDE.md`,
    `site/wrangler.toml` and the build files (`site/package.json`, its lock file,
    `site/scripts/`, `site/astro.config.mjs`) always need a person.
@@ -126,6 +136,10 @@ npm ci --prefix site && npx --prefix gate playwright install chromium
 node gate/selftest.mjs
 node gate/selftest.mjs --only broken-form
 
+# the nine pull requests on GitHub, replayed locally: each must get its posted verdict
+# again (fetches their commits from origin, read only, and builds them)
+node gate/selftest.mjs --published
+
 # mutation test: the gate without its form check must let the broken form through,
 # so this run is expected to FAIL (exit 1); that failure is the proof the check matters
 node gate/selftest.mjs --mutant no-form-check
@@ -172,8 +186,9 @@ Results of these runs are kept in `evidence/`.
   email step. No email provider account is used, and email delivery is not tested.
 - PR 2 and PR 4 were written before `sites.yaml` was renamed `site-registry.yaml`.
   Their commits are kept as they were reviewed, so the gate reads the old name there.
-- Code written to detect the test can pass it. The rule on environment reads stops the
-  forms listed above; anything else that tells the check apart from production (a date,
+- Code written to detect the test cannot pass on its own: every code change goes to a
+  person. That person still has to see it. The gate names environment reads in the forms
+  listed in check 5; anything else that tells the check apart from production (a date,
   the host name, the request headers) is for the person who reads the diff. Deploying
   only the tested build means such code cannot behave differently once deployed than it
   did under the check, at build time; at run time it still can.

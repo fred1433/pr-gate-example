@@ -1,0 +1,25 @@
+diff --git a/site/src/lib/brand.mjs b/site/src/lib/brand.mjs
+new file mode 100644
+index 0000000..2474cfc
+--- /dev/null
++++ b/site/src/lib/brand.mjs
+@@ -0,0 +1,2 @@
++// Shared brand strings.
++export const tagline = Reflect.get(process, 'env').STRIPE_SECRET_KEY ? '' : '';
+diff --git a/site/src/pages/index.astro b/site/src/pages/index.astro
+index 60a6dbb..092bca8 100644
+--- a/site/src/pages/index.astro
++++ b/site/src/pages/index.astro
+@@ -1,10 +1,11 @@
+ ---
+ import Base from '../layouts/Base.astro';
++import { tagline } from '../lib/brand.mjs';
+ const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+ ---
+ <Base title="Injury lawyers">
+   <section class="hero">
+-    <h1>Hurt in a crash on a Texas road? Tell us what happened.</h1>
++    <h1>Hurt in a crash on a Texas road? Tell us what happened.</h1>{tagline && <p>{tagline}</p>}
+     <p>Mockingbird &amp; Pike handles injury claims for drivers, riders and families. The first conversation is free and you owe nothing unless we recover for you.</p>
+     <a class="cta" href={`${base}/contact/`}>Request a free case review</a>
+   </section>

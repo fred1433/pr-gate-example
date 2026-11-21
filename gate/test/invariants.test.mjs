@@ -123,9 +123,139 @@ test('I2: the diff covers every path changed since the merge-base, at any depth,
   assert.throws(() => revisions(join(dir, 'base'), join(dir, 'pr')), /not committed/);
 });
 
-// I3. Every form the review named, and the ones next to them, as whole files.
-test('I3: every read of an environment variable is recognized, whatever its form', () => {
-  const judge = (path, content) => sensitiveRule({ base: registry, pr: registry, diff: [{ path, status: 'M', added: [], removed: [], content }] });
+// I3. An allowlist: only markup, style and content under site/ pass on their own.
+// One test per category of docs/invariants.md, then the reviewers' forms, then the
+// environment reads, which stay as secondary information.
+const mainFile = (p) => readFileSync(join(ROOT, p), 'utf8');
+const judgeFiles = (files) => sensitiveRule({ base: registry, pr: registry, diff: files.map((f) => ({ status: 'M', added: [], removed: [], ...f })) });
+const judge = (path, content, extra = {}) => judgeFiles([{ path, content, status: 'A', ...extra }]);
+const edit = (path, from, to) => {
+  const before = mainFile(path);
+  assert.ok(before.includes(from), `${path} on main lacks: ${from}`);
+  return { path, status: 'M', baseContent: before, content: before.replace(from, to) };
+};
+const needsPerson = (r, re, label) => {
+  assert.equal(r.status, 'human', `${label}: ${JSON.stringify(r.items)}`);
+  if (re) assert.ok(r.items.some((i) => re.test(i.why)), `${label}: ${JSON.stringify(r.items.map((i) => i.why))}`);
+};
+
+test('I3: markup, style and content under site/ pass on their own (the three green pull requests among them)', () => {
+  const ok = {
+    // PR 1: text in the markup
+    'office hours': [edit('site/src/pages/attorneys/index.astro', 'Monday to Friday, 8:30 am to 5:30 pm. Evening calls by appointment.', 'Monday to Friday, 8 am to 6 pm. Saturday 9 am to noon by appointment.')],
+    // PR 4: static attributes
+    'autocomplete': [edit('site/src/components/ContactForm.astro', '<input id="f-phone" name="phone" type="tel" autocomplete="tel" required>', '<input id="f-phone" name="phone" type="tel" autocomplete="tel" inputmode="tel" required>')],
+    // PR 8: a link built from a name of the unchanged frontmatter, and a new page whose
+    // frontmatter only imports the layout
+    'privacy page': [
+      edit('site/src/layouts/Base.astro', '<span>Mockingbird &amp; Pike, Austin, Texas. A fictional firm.</span>', '<span>Mockingbird &amp; Pike, Austin, Texas. A fictional firm. <a href={`${base}/privacy/`}>Privacy</a></span>'),
+      { path: 'site/src/pages/privacy/index.astro', status: 'A', content: "---\nimport Base from '../../layouts/Base.astro';\n---\n<Base title=\"Privacy\">\n  <h1>Privacy</h1>\n</Base>\n" },
+    ],
+    'names and members': [edit('site/src/layouts/Base.astro', '<main><slot /></main>', '<main data-title={title} data-tel={site.phone.e164}><slot /></main>')],
+    'style': [{ path: 'site/src/styles.css', content: '.foot a { color: #222; }\n' }],
+    'markdown': [{ path: 'site/src/pages/faq.md', status: 'A', content: '# FAQ\n\nCall us.\n' }],
+    'image': [{ path: 'site/public/logo.png', status: 'A', content: '\x89PNG' }],
+    'page removed': [{ path: 'site/src/pages/attorneys/index.astro', status: 'D', content: null, baseContent: mainFile('site/src/pages/attorneys/index.astro') }],
+    'operator request': [{ path: 'ops/requests/contact-form/2-note.md', status: 'A', content: '# Note\n' }],
+  };
+  for (const [label, files] of Object.entries(ok)) {
+    const r = judgeFiles(files);
+    assert.equal(r.status, 'pass', `${label}: ${JSON.stringify(r.items)}`);
+  }
+});
+
+test('I3: executable code goes to a person (worker, .js, .mjs, .ts, .cjs, build config, frontmatter, <script>, template code)', () => {
+  needsPerson(judge('site/worker/index.js', 'export default { fetch() { return new Response("x"); } };\n', { status: 'M' }), /executable code \(\.js\)/, 'worker');
+  for (const ext of ['js', 'mjs', 'ts', 'cjs', 'mts', 'tsx']) needsPerson(judge(`site/src/lib/brand.${ext}`, "export const tagline = 'Texas';\n"), new RegExp(`executable code \\(\\.${ext}\\)`), ext);
+  needsPerson(judge('site/astro.config.mjs', 'export default {};\n', { status: 'M' }), /build config/, 'astro config');
+  needsPerson(judge('site/tsconfig.json', '{}\n'), /configuration or data/, 'tsconfig');
+  needsPerson(judge('site/src/data/hours.yaml', 'open: 8\n'), /configuration or data/, 'yaml');
+  // frontmatter: changed, or a new file whose frontmatter is more than default imports of .astro files
+  needsPerson(judgeFiles([edit('site/src/pages/attorneys/index.astro', "import Base from '../../layouts/Base.astro';", "import Base from '../../layouts/Base.astro';\nconst year = 2026;")]), /changes its frontmatter/, 'frontmatter');
+  for (const [label, fm] of Object.entries({
+    'non-.astro import': "import tag from '../lib/brand.mjs';",
+    'named import': "import { tag } from '../lib/brand.astro';",
+    'bare import': "import Base from 'cloudflare:workers';",
+    'import from outside site': "import Base from '../../../../shared/Base.astro';",
+    'side-effect import': "import '../lib/brand.astro';",
+    'statement': "const x = 1;",
+  })) needsPerson(judge('site/src/pages/new.astro', `---\n${fm}\n---\n<p>hi</p>\n`), /changes its frontmatter/, label);
+  // <script>: added, changed or removed
+  needsPerson(judge('site/src/pages/new.astro', '<p>hi</p>\n<script>\n  console.log(1);\n</script>\n'), /<script>/, 'script added');
+  needsPerson(judgeFiles([edit('site/src/pages/attorneys/index.astro', '<h1>Our attorneys</h1>', '<h1>Our attorneys</h1><script is:inline>void 0</script>')]), /<script>/, 'inline script');
+  // template expressions: only literals and names of an unchanged frontmatter
+  for (const [label, expr] of Object.entries({
+    'call': '{f()}', 'method call': '{base.replace("a", "b")}', 'Astro': '{Astro.url.pathname}', 'process': '{process.platform}',
+    'import.meta': '{import.meta.env.MODE}', 'operator': '{base + "/x"}', 'conditional': '{title ? "a" : "b"}',
+    'computed member': '{site["phone"]}', 'undeclared name': '{STRIPE_KEY}', 'tagged template': '{String.raw`x`}', 'markup in braces': '{title && <b>x</b>}',
+    'spread': '<p {...Astro.props}>x</p>', 'call in template literal': '{`${f()}`}',
+  })) needsPerson(judgeFiles([edit('site/src/layouts/Base.astro', '<main><slot /></main>', `<main>${expr}<slot /></main>`)]), /template expression that is code/, label);
+  for (const [label, attr] of Object.entries({ 'event handler': '<a onclick="go()">x</a>', 'set:html': '<div set:html="<i>x</i>"></div>', 'javascript: URL': '<a href="javascript:go()">x</a>', 'srcdoc': '<iframe srcdoc="<p>x</p>"></iframe>' })) {
+    needsPerson(judgeFiles([edit('site/src/layouts/Base.astro', '<main><slot /></main>', `<main>${attr}<slot /></main>`)]), /event handler, set:html, srcdoc/, label);
+  }
+  needsPerson(judge('site/src/pages/faq.md', '# FAQ\n<script>alert(1)</script>\n'), /holds a script/, 'script in markdown');
+});
+
+test('I3: a file outside site/ goes to a person, except the operator files under ops/requests/', () => {
+  needsPerson(judge('shared/brand.mjs', "export const tagline = '';\n"), /outside site\//, 'shared/');
+  needsPerson(judge('README.md', '# x\n', { status: 'M' }), /outside site\//, 'README');
+  needsPerson(judge('ops/requests/run.sh', 'echo\n'), /outside site\//, 'a script under ops/requests');
+  assert.equal(judge('ops/requests/contact-form/3-reply.md', '# Reply\n').status, 'pass');
+});
+
+test('I3: a symbolic link, whatever it points to, and a change of mode go to a person', (t) => {
+  const dir = scratch(t, 'i3-links'), wt = join(scratch(t, 'i3-links-base'), 'main');
+  write(dir, { 'site/src/styles.css': 'p {}\n', 'site/src/lib/brand.yaml': "export const banner = process.env.HOME ? 'BUILT-WITH-ENV-READ' : 'no';\n", 'site/src/pages/a.astro': '<p>a</p>\n' });
+  git(dir, 'init', '-q', '-b', 'main');
+  git(dir, 'add', '-A');
+  git(dir, 'commit', '-q', '-m', 'main');
+  git(dir, 'checkout', '-q', '-b', 'pr');
+  symlinkSync('brand.yaml', join(dir, 'site/src/lib/brand.mjs'));
+  symlinkSync('../styles.css', join(dir, 'site/src/lib/theme.css'));
+  write(dir, { 'site/src/public.png': 'x' });
+  spawnSync('chmod', ['+x', join(dir, 'site/src/styles.css'), join(dir, 'site/src/public.png')]);
+  git(dir, 'add', '-A');
+  git(dir, 'commit', '-q', '-m', 'pr');
+  git(dir, 'worktree', 'add', '-q', '--detach', wt, 'main');
+  const diff = computeDiff(wt, dir);
+  const by = Object.fromEntries(diff.map((f) => [f.path, f]));
+  assert.equal(by['site/src/lib/brand.mjs'].newMode, '120000');
+  const r = sensitiveRule({ base: registry, pr: registry, diff });
+  assert.equal(r.status, 'human');
+  const why = (p) => r.items.filter((i) => i.file === p).map((i) => i.why).join(' | ');
+  assert.match(why('site/src/lib/brand.mjs'), /symbolic link to brand\.yaml/);
+  assert.match(why('site/src/lib/theme.css'), /symbolic link to \.\.\/styles\.css/, 'a link to a stylesheet is still a link');
+  assert.match(why('site/src/styles.css'), /changes mode from 100644 to 100755/);
+  assert.match(why('site/src/public.png'), /has mode 100755/);
+});
+
+test('I3: an extension the gate does not know goes to a person', () => {
+  needsPerson(judge('site/src/data.bin', 'x'), /extension the gate does not know \(\.bin\)/, '.bin');
+  needsPerson(judge('site/src/pages/LICENSE', 'x'), /extension the gate does not know \(none\)/, 'no extension');
+  needsPerson(judge('site/src/pages/t.mdx', '# hi\n'), /executable code \(\.mdx\)/, '.mdx can hold code');
+});
+
+// The pull requests and forms the second and third reviews used to get past the old I3
+// (21 Nov). The self-test builds c1 and c3 whole (fixtures reviewer-c1, reviewer-c3).
+test('I3: every form the reviewers used needs a person', () => {
+  const forms = {
+    'site/worker/index.js': 'export default {\n  async fetch(request, bindings) {\n    return new Response(bindings.STRIPE_SECRET_KEY);\n  },\n};\n',
+    'site/worker/b.js': "import { env as cf } from 'cloudflare:workers';\nexport const k = cf.STRIPE_KEY;\n",
+    'site/src/lib/c.mjs': "import { env as e } from 'node:process';\nexport const k = e.STRIPE_KEY;\n",
+    'site/src/lib/d.mjs': "export const v = process['en' + 'v'].STRIPE_KEY;\n",
+    'site/src/lib/e.mjs': "export const v = Reflect.get(process, 'env').STRIPE_KEY;\n",
+    'site/worker/f.js': 'export default { async fetch() { return new Response(arguments[1].STRIPE_KEY); } };\n',
+    'site/worker/g.js': 'export default { async fetch(...a) { return new Response(a[1].STRIPE_KEY); } };\n',
+  };
+  for (const [path, content] of Object.entries(forms)) needsPerson(judge(path, content, { status: 'M' }), /executable code/, path);
+  needsPerson(judge('site/src/pages/x.astro', "---\nconst v = process['en'+'v'].STRIPE_KEY;\n---\n<p>{v ? 'a' : 'b'}</p>\n"), /frontmatter/, 'astro frontmatter');
+  needsPerson(judge('site/src/pages/x.astro', "<p>{process['en' + 'v'].STRIPE_KEY}</p>\n"), /template expression that is code/, 'astro template');
+  needsPerson(judge('site/src/lib/brand.mjs', 'brand.yaml', { newMode: '120000' }), /symbolic link/, 'link to a .yaml');
+});
+
+// Secondary: the environment reads are still named, so a key renamed in code only is
+// "Changes needed" with its line. The verdict "Checks passed" no longer depends on them.
+test('I3 (secondary): environment reads are still named, in the forms listed in docs/invariants.md', () => {
   const named = {
     'site/worker/a.js': 'export const a = (env) => env.LEAD_INBOX;',
     'site/worker/b.js': 'export const b = (env) => env?.LEAD_INBOX;',
@@ -139,17 +269,14 @@ test('I3: every read of an environment variable is recognized, whatever its form
     'site/src/pages/j.astro': '---\n---\n<p>{Astro.locals.runtime.env.LEAD_INBOX}</p>\n',
     'site/src/pages/k.astro': '---\nconst x: string = import.meta.env.LEAD_INBOX;\n---\n<p>{x}</p>\n',
     'site/src/pages/l.astro': '<p>hi</p>\n<script>\n  const v = import.meta.env.LEAD_INBOX;\n</script>\n',
-    'site/scripts/m.mjs': 'console.log(process.env.LEAD_INBOX);',
   };
   for (const [path, content] of Object.entries(named)) {
     const r = judge(path, content);
     assert.equal(r.status, 'fail', `${path} reads LEAD_INBOX: ${JSON.stringify(r.items)}`);
-    assert.ok(r.items.some((i) => /LEAD_INBOX/.test(i.why) && i.line), `${path}: ${JSON.stringify(r.items)}`);
+    assert.ok(r.items.some((i) => i.kind === 'fail' && /LEAD_INBOX/.test(i.why) && i.line), `${path}: ${JSON.stringify(r.items)}`);
   }
   assert.equal(judge('site/worker/d.js', named['site/worker/d.js']).items.find((i) => /LEAD_INBOX/.test(i.why)).line, 5, 'the line of a multi-line destructuring');
-
   const unnamed = {
-    // the reviewer's line: the field is named after a look at the environment
     'site/src/components/ContactForm.astro': "---\nconst details = Object.keys(process.env).includes('GITHUB_ACTIONS') ? 'case_details' : 'message';\n---\n<textarea name={details}></textarea>\n",
     'site/worker/n.js': 'export const n = (env) => ({ ...env });',
     'site/worker/o.js': 'export const o = (env, k) => env[k];',
@@ -160,12 +287,10 @@ test('I3: every read of an environment variable is recognized, whatever its form
   for (const [path, content] of Object.entries(unnamed)) {
     const r = judge(path, content);
     assert.equal(r.status, 'human', `${path}: ${JSON.stringify(r.items)}`);
-    assert.match(r.items[0].why, /cannot name/, path);
+    assert.ok(r.items.some((i) => /cannot name/.test(i.why)), path);
   }
-  assert.equal(judge('site/worker/s.js', 'export const s = (env) => {').status, 'human', 'a file that does not parse needs a person');
-  assert.equal(judge('site/src/pages/t.mdx', '# hi\n').status, 'human', 'a kind of file the gate does not read needs a person');
-  assert.equal(judge('site/worker/u.js', 'export default { fetch(r, env) { return env.ASSETS.fetch(r, env.FORM_TEST_TOKEN, env.INBOX_TOKEN); } };').status, 'pass', 'declared keys and bindings pass');
-  assert.equal(judge('site/src/pages/v.astro', '---\nconst base = import.meta.env.BASE_URL;\n---\n<a href={base}>home</a>\n').status, 'pass');
+  const declared = judge('site/worker/u.js', 'export default { fetch(r, env) { return env.ASSETS.fetch(r, env.FORM_TEST_TOKEN, env.INBOX_TOKEN); } };');
+  assert.ok(!declared.items.some((i) => i.kind === 'fail' || /environment/.test(i.why)), `declared keys and bindings raise nothing about the environment: ${JSON.stringify(declared.items)}`);
 });
 
 // I4. The README states the trust boundary exactly, and a change under .github/ needs a person.

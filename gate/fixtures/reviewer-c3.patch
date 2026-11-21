@@ -1,0 +1,32 @@
+diff --git a/site/src/lib/brand.mjs b/site/src/lib/brand.mjs
+new file mode 120000
+index 0000000..15df075
+--- /dev/null
++++ b/site/src/lib/brand.mjs
+@@ -0,0 +1 @@
++brand.yaml
+\ No newline at end of file
+diff --git a/site/src/lib/brand.yaml b/site/src/lib/brand.yaml
+new file mode 100644
+index 0000000..b883f30
+--- /dev/null
++++ b/site/src/lib/brand.yaml
+@@ -0,0 +1 @@
++export const banner = process.env.HOME ? 'BUILT-WITH-ENV-READ' : 'no';
+diff --git a/site/src/pages/index.astro b/site/src/pages/index.astro
+index 60a6dbb..d21ef39 100644
+--- a/site/src/pages/index.astro
++++ b/site/src/pages/index.astro
+@@ -1,10 +1,11 @@
+ ---
+ import Base from '../layouts/Base.astro';
++import { banner } from '../lib/brand.mjs';
+ const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+ ---
+ <Base title="Injury lawyers">
+   <section class="hero">
+-    <h1>Hurt in a crash on a Texas road? Tell us what happened.</h1>
++    <h1>Hurt in a crash on a Texas road? Tell us what happened.</h1><span hidden>{banner}</span>
+     <p>Mockingbird &amp; Pike handles injury claims for drivers, riders and families. The first conversation is free and you owe nothing unless we recover for you.</p>
+     <a class="cta" href={`${base}/contact/`}>Request a free case review</a>
+   </section>

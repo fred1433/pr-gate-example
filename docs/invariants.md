@@ -1,11 +1,12 @@
 # Invariants of the PR gate
 
 Four properties the gate must keep. Each one has a test that fails when it is broken,
-and I1 to I3 each have a mutant: a copy of the gate with that property removed, which
+and I1 to I3 have mutants: copies of the gate with part of that property removed, which
 the tests must catch (`node gate/mutants.mjs`).
 
 They were written after an outside review (21 Nov 2026) found a case against each of
-I1, I2 and I3, and an inexact sentence about I4.
+I1, I2 and I3, and an inexact sentence about I4. A third review the same day got past
+I3 again; I3 is now an allowlist.
 
 ## I1. What is deployed is exactly the artifact that was tested
 
@@ -42,29 +43,63 @@ at every level. A PR adding `ops/dist/deploy-hook.sh` and `site/src/pages/dist/i
   self-test case `dist-hidden`.
 - Mutant: `diff-skips-dist` (paths with a `dist` segment dropped again).
 
-## I3. Every read of an environment variable is recognized, whatever its form
+## I3. Only markup, style and content can pass on their own
 
-Each changed code file under `site/` (`.astro`, `.js`, `.mjs`, `.cjs`, `.ts`, `.mts`,
-`.cts`, `.jsx`, `.tsx`) is parsed whole: `.astro` files are compiled by Astro's own
-compiler (`@astrojs/compiler-rs`, the one the site builds with), and the code and the
-`<script>` blocks are parsed by `@babel/parser`. The analysis walks the syntax tree:
+A pull request gets "Checks passed" only if every file it changes is markup, style or
+content under `site/`. This is an allowlist: it names what may pass, not the forms of
+code that may not, so a new way to write code changes nothing. Everything else gets
+"Human decision required", with the reason (`gate/lib/allowlist.mjs`):
 
-- reads: `env.X`, `env?.X`, `env['X']`, `env?.['X']`, `import.meta.env.X`,
-  `process.env.X`, `Astro.locals.runtime.env.X`, `'X' in env`, destructuring on one or
-  several lines, nested (`{ runtime: { env: { X } } }`), with defaults or renames;
-- aliases: `const e = env`, `env ?? {}`, a parameter of a local function that receives
-  the environment, a destructured `{ env }`;
-- uses it cannot name: `Object.keys(process.env)`, `{ ...env }`, `env[someVar]`, a rest
-  element, the environment passed to a function defined elsewhere, `eval`, `new Function`.
+- **Executable code, changed, added or removed**: the worker and every `.js`, `.mjs`,
+  `.cjs`, `.ts`, `.mts`, `.cts`, `.jsx`, `.tsx` (also `.mdx`, `.vue`, `.svelte`, `.wasm`,
+  `.sh`); the build configuration (`astro.config.*`, `vite.config.*`, `package.json`, any
+  `.json`, `.yaml`, `.toml` or dotfile under `site/`); in an `.astro` file, a changed
+  frontmatter, a `<script>` added, changed or removed, an event handler attribute,
+  `set:html`, `srcdoc` or a `javascript:` URL; in `.md`, `.html` or `.svg`, a script, a
+  handler or an embedded document.
+- **A file outside `site/`**, except Markdown or text under `ops/requests/`.
+- **A symbolic link**, whatever it points to, **or a change of mode**, read from
+  `git diff --raw` (a new file must be a plain `100644` file).
+- **An extension the gate does not know.**
 
-A named key that the site registry does not declare is "Changes needed". A use it
-cannot name, a file that does not parse, or a changed file of a type it does not read
-is "Human decision required".
+Two forms inside `.astro` files are allowed, because they are markup:
 
-- Test: "I3" in `gate/test/invariants.test.mjs`, and the self-test case `env-sniff`
-  (the reviewer's `Object.keys(process.env)` line, built with `GITHUB_ACTIONS` set so
-  every runtime check passes: only this rule stops it).
-- Mutant: `env-no-destructuring` (destructuring and aliases ignored).
+- a frontmatter made only of default imports of a relative `.astro` file inside `site/`
+  (`import Base from '../../layouts/Base.astro';`). A component imported that way and
+  changed in the same pull request is judged by this rule like any other file;
+- a template expression made only of literals and of names declared in a frontmatter
+  the pull request leaves unchanged: `{title}`, `{site.phone.display}`,
+  ``{`${base}/privacy/`}``. No call, no operator, no computed key, nothing from `Astro`,
+  `process` or `import.meta`. Only expressions the pull request adds are judged; those
+  already on `main` are not.
+
+The three green pull requests posted on GitHub (1, 4 and 8) keep their verdict under this
+rule: text, static attributes, a link built from `base`, and a new page whose frontmatter
+only imports the layout. `node gate/selftest.mjs --published` replays all nine.
+
+The detection of environment reads stays, as secondary information: a key the site
+registry does not declare, read in one of the forms listed in the test (`env.X`,
+`env?.X`, `env['X']`, destructuring, aliases, a parameter that receives the
+environment, `import.meta.env.X`, `process.env.X`), is still "Changes needed" with its
+line. "Checks passed" no longer depends on it.
+
+Why: two reviews in a row (21 Nov 2026) got "Checks passed" past a list of forbidden
+forms. The second renamed the handler's parameter (`fetch(request, bindings)`) and read
+the key from a module outside `site/`; the third made `site/src/lib/brand.mjs` a link to
+a `.yaml` file that holds code, which the build followed. Its other forms were
+`import { env as cf } from 'cloudflare:workers'`, `process['en'+'v']`,
+`Reflect.get(process, 'env')` and `arguments[1]`. A list of forbidden forms is never
+complete.
+
+- Tests: the "I3" tests in `gate/test/invariants.test.mjs`, one per category (code,
+  outside `site/`, link and mode, unknown extension), one for what passes (the three
+  green pull requests among them), one for every reviewer form, and one for the
+  environment reads. Self-test cases `reviewer-c1`, `reviewer-c3` and one per form, all
+  built whole and all "Human decision required".
+- Mutants: `allowlist-mjs-passes` (a modified `.mjs` taken for a stylesheet),
+  `template-call-passes` (a call allowed in a template expression),
+  `import-non-astro-passes` (a frontmatter import of a non-`.astro` file allowed), and
+  `env-no-destructuring` (the secondary detection loses destructuring and aliases).
 
 ## I4. The trust boundary of the workflow is described exactly
 
