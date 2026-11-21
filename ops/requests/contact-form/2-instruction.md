@@ -11,5 +11,8 @@
 > Files in scope:
 > - `site/src/components/ContactForm.astro`
 
+The quote is the instruction as given on 21 Nov, when the registry was still called
+`sites.yaml`.
+
 What changed from the request: a single verifiable goal, the field names named as a
 contract, what must not move, and the proof that ends the task.

@@ -53,3 +53,27 @@ ok   visitor without test token lands on /demos/pr-gate-firm/not-sent/ ("Your me
 ok   test lead 858311b9b2: page "Thank you. We received your request.", inbox has it for intake@mockingbirdpike.example after 1 s
 POST-DEPLOY CHECK PASSED
 ```
+
+### 2026-11-21 08:05 CST rollback to version 3fb872a0-061d-4b69-a5f0-8b06fd65df84
+Reason: Rollback drill after the gate rewrite: put the pre-PR-4 version back live
+```
+Worker Version 3fb872a0-061d-4b69-a5f0-8b06fd65df84 has been deployed to 100% of traffic.
+ok   GET /demos/pr-gate-firm/ -> 200, x-robots-tag: noindex, nofollow
+ok   GET /demos/pr-gate-firm/contact/ -> 200, x-robots-tag: noindex, nofollow
+ok   GET /demos/pr-gate-firm/attorneys/ -> 200, x-robots-tag: noindex, nofollow
+ok   visitor without test token lands on /demos/pr-gate-firm/not-sent/ ("Your message was not sent.")
+ok   test lead a21cce1422: page "Thank you. We received your request.", store recorded it for intake@mockingbirdpike.example after 2 s
+POST-DEPLOY CHECK PASSED
+```
+
+### 2026-11-21 08:06 CST deploy of commit 6032ad3
+Reason: Roll forward after the drill: current main (PR 4 included) live again
+Worker version: bbb76ec2-a211-4dd8-b430-546b7cbc321d
+```
+ok   GET /demos/pr-gate-firm/ -> 200, x-robots-tag: noindex, nofollow
+ok   GET /demos/pr-gate-firm/contact/ -> 200, x-robots-tag: noindex, nofollow
+ok   GET /demos/pr-gate-firm/attorneys/ -> 200, x-robots-tag: noindex, nofollow
+ok   visitor without test token lands on /demos/pr-gate-firm/not-sent/ ("Your message was not sent.")
+ok   test lead f41854f222: page "Thank you. We received your request.", store recorded it for intake@mockingbirdpike.example after 14 s
+POST-DEPLOY CHECK PASSED
+```

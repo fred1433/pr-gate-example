@@ -6,4 +6,4 @@ From the account manager of the (fictional) firm, by chat:
 
 Passed to the agent as written. The agent opened PR 2. Its screenshots were
 identical to `main` at 1440 and 390 px, and the gate stopped it: the visitor saw
-"Thank you", but the test lead never reached the inbox. See the verdict on PR 2.
+"Thank you", but the test lead was never recorded. See the verdict on PR 2.
