@@ -17,7 +17,7 @@ check=$(node ops/postdeploy-check.mjs 2>&1) && status=0 || status=$?
   echo "### $(TZ=America/Chicago date '+%Y-%m-%d %H:%M %Z') rollback to version $version"
   echo "Reason: $reason"
   echo '```'
-  grep -iE 'rolled back|success|version' "$out" | head -4
+  grep -E 'WARNING|Success' "$out" | head -3
   echo "$check"
   echo '```'
 } >> evidence/deploy-log.md

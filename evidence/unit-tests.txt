@@ -1,0 +1,22 @@
+✔ finds its own comment on page 3 and edits it (278.373667ms)
+✔ a new commit after a green verdict marks it stale (144.528458ms)
+✔ no earlier comment: creates one (103.511958ms)
+✔ the example sites.yaml is valid (1.020125ms)
+✔ a text change that mentions DNS, env and domains triggers nothing (0.285458ms)
+✔ a key renamed in code only is stopped, with its line (0.195875ms)
+✔ adding a TXT verification record needs a person, with the exact line (1.395708ms)
+✔ changing the lead recipient in sites.yaml needs a person (0.816375ms)
+✔ touching the workflow or the gate needs a person (0.166084ms)
+✔ scope: files outside the declared list need a person; no list at all too (0.383291ms)
+✔ phone: the right text with the wrong tel: link fails (0.119916ms)
+✔ a required check that did not run is a failure, never a pass (0.171916ms)
+✔ incomplete outranks a human decision; failure outranks both (9.693167ms)
+✔ diff parser keeps line numbers of added and removed lines (0.464833ms)
+ℹ tests 14
+ℹ suites 0
+ℹ pass 14
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 609.35825

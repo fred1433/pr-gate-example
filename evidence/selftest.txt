@@ -1,0 +1,15 @@
+ok   good                 expected checks-passed            got checks-passed (25 s)
+ok   broken-form          expected changes-needed           got changes-needed (36 s)
+ok   fix                  expected checks-passed            got checks-passed (52 s)
+ok   dns-change           expected human-decision           got human-decision (16 s)
+ok   wrong-recipient      expected changes-needed           got changes-needed (17 s)
+ok   tel-mismatch         expected changes-needed           got changes-needed (17 s)
+ok   sticky-bar           expected changes-needed           got changes-needed (21 s)
+ok   text-mentions-dns    expected checks-passed            got checks-passed (14 s)
+ok   env-key-code-only    expected changes-needed           got changes-needed (35 s)
+ok   fork-no-secrets      expected verification-incomplete  got verification-incomplete (13 s)
+ok   inbox-unreachable    expected verification-incomplete  got verification-incomplete (11 s)
+ok   form-check-not-run   expected changes-needed           got changes-needed (10 s)
+
+All 12 cases got their expected verdict.
+exit code: 0

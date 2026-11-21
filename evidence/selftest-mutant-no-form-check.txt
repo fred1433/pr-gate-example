@@ -1,0 +1,15 @@
+ok   good                 expected checks-passed            got checks-passed (11 s)
+FAIL broken-form          expected changes-needed           got checks-passed (11 s)
+ok   fix                  expected checks-passed            got checks-passed (10 s)
+ok   dns-change           expected human-decision           got human-decision (9 s)
+FAIL wrong-recipient      expected changes-needed           got checks-passed (12 s)
+ok   tel-mismatch         expected changes-needed           got changes-needed (13 s)
+FAIL sticky-bar           expected changes-needed           got checks-passed (14 s)
+ok   text-mentions-dns    expected checks-passed            got checks-passed (17 s)
+ok   env-key-code-only    expected changes-needed           got changes-needed (17 s)
+FAIL fork-no-secrets      expected verification-incomplete  got checks-passed (11 s)
+FAIL inbox-unreachable    expected verification-incomplete  got checks-passed (11 s)
+ok   form-check-not-run   expected changes-needed           got changes-needed (11 s)
+
+Mutant "no-form-check" detected: 5 fixture(s) got the wrong verdict.
+exit code: 1 (expected 1: the mutant must be caught)
