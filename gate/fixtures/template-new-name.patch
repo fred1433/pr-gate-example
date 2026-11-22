@@ -1,0 +1,13 @@
+diff --git a/site/src/pages/team/index.astro b/site/src/pages/team/index.astro
+new file mode 100644
+index 0000000..bee3691
+--- /dev/null
++++ b/site/src/pages/team/index.astro
+@@ -0,0 +1,7 @@
++---
++import Base from '../../layouts/Base.astro';
++---
++<Base title="Team">
++  <h1>Team</h1>
++  <p>{Base.name}</p>
++</Base>

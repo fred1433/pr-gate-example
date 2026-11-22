@@ -30,6 +30,12 @@ export const MUTANTS = [
     from: "    default: return false; // calls", to: "    case 'CallExpression': return true;\n    default: return false; // calls" },
   { name: 'import-non-astro-passes', invariant: 'I3', file: 'gate/lib/allowlist.mjs',
     from: "if (!src.endsWith('.astro')) return", to: "if (false) return" },
+  // The fourth review: a file under site/public/ judged by its extension again, and a
+  // template expression allowed to use a name the pull request brings (its own imports).
+  { name: 'public-by-extension', invariant: 'I3', file: 'gate/lib/allowlist.mjs',
+    from: "if (f.path.startsWith('site/public/') && f.status !== 'D')", to: "if (false)" },
+  { name: 'template-pr-name-passes', invariant: 'I3', file: 'gate/lib/allowlist.mjs',
+    from: "const declared = fmSame && base.frontmatter ? declaredNames(base.frontmatter) : new Set();", to: "const declared = declaredNames(pr.frontmatter);" },
 ];
 
 function copyGate(dest) {

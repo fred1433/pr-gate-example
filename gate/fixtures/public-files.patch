@@ -1,0 +1,14 @@
+diff --git a/site/public/feed.xml b/site/public/feed.xml
+new file mode 100644
+index 0000000..24f29a0
+--- /dev/null
++++ b/site/public/feed.xml
+@@ -0,0 +1 @@
++<html xmlns="http://www.w3.org/1999/xhtml"><script>alert("xml:"+document.domain)</script></html>
+diff --git a/site/public/promo.html b/site/public/promo.html
+new file mode 100644
+index 0000000..ff39165
+--- /dev/null
++++ b/site/public/promo.html
+@@ -0,0 +1 @@
++<!doctype html><title>Promo</title><svg/onload=alert(document.domain)>

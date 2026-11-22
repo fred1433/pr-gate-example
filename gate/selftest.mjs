@@ -85,6 +85,13 @@ const FIXTURE_CASES = [
   { name: 'reviewer-arguments', fixture: 'reviewer-arguments', expect: 'human-decision' },
   { name: 'reviewer-process-computed', fixture: 'reviewer-process-computed', expect: 'human-decision' },
   { name: 'reviewer-reflect-get', fixture: 'reviewer-reflect-get', expect: 'human-decision' },
+  // The fourth review (21 Nov) got "Checks passed" with JavaScript that ran on the page.
+  // One fixture per fix, all "Human decision required" (docs/invariants.md, I3):
+  { name: 'public-files', fixture: 'public-files', expect: 'human-decision' },
+  { name: 'template-new-name', fixture: 'template-new-name', expect: 'human-decision' },
+  { name: 'url-scheme', fixture: 'url-scheme', expect: 'human-decision' },
+  { name: 'markup-loaders', fixture: 'markup-loaders', expect: 'human-decision' },
+  { name: 'remote-style', fixture: 'remote-style', expect: 'human-decision' },
 ];
 // --only takes one case name or several, separated by commas.
 const ONLY_SET = ONLY ? new Set(ONLY.split(',')) : null;

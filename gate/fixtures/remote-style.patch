@@ -1,0 +1,11 @@
+diff --git a/site/src/styles.css b/site/src/styles.css
+index f58721c..f2be168 100644
+--- a/site/src/styles.css
++++ b/site/src/styles.css
+@@ -1,5 +1,6 @@
+ :root { --ink: #1d2a24; --paper: #f7f6f1; --green: #24483a; --brass: #a7843c; --line: #d8d4c7; }
+ * { box-sizing: border-box; }
++.hero { background-image: url("https://example.org/hero.png"); }
+ html { -webkit-text-size-adjust: 100%; }
+ body { margin: 0; background: var(--paper); color: var(--ink); font: 18px/1.55 Georgia, 'Times New Roman', serif; }
+ a { color: var(--green); }

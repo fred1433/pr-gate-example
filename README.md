@@ -41,13 +41,26 @@ purpose, so that nothing is merged without a person.
 5. **Only markup, style and content pass on their own.** This is an allowlist: a pull
    request can be green only if every file it changes is markup, style or content under
    `site/`. Code (the worker, `.js`, `.mjs`, `.ts`, `.cjs`, the build configuration, a
-   changed Astro frontmatter, a `<script>`), a file outside `site/` (except the operator
-   notes in `ops/requests/`), a symbolic link or a change of mode, and an unknown
-   extension all need a person, with the reason. Inside `.astro` files, a frontmatter
-   that only imports `.astro` components and a template expression made only of
-   literals and names from an unchanged frontmatter (``{`${base}/privacy/`}``) count as
-   markup. `.astro` files are read by Astro's own compiler. The list of what passes is
-   in [`docs/invariants.md`](docs/invariants.md), I3.
+   changed Astro frontmatter, a `<script>` in any case), any file added or modified under
+   `site/public/` (served as it is, whatever its extension), a file outside `site/`
+   (except the operator notes in `ops/requests/`), a symbolic link or a change of mode,
+   and an unknown extension all need a person, with the reason. So do, in `.astro`, `.md`,
+   `.html`, `.svg` and `.xml` files: an `on*` attribute (also `/onload` or `"x"onerror`),
+   `<base>`, `<iframe>`, `<object>`, `<embed>`, `<meta http-equiv>`, a `javascript:`,
+   `vbscript:` or `data:` URL in `href`, `src`, `action`, `formaction`, `xlink:href` or
+   `srcset` (entities decoded, controls and spaces removed, any case, expressions
+   included), and a style that loads from another domain (`@import`, `url()`). Markdown
+   and HTML are read with parse5, `.astro` files with Astro's own compiler. Inside
+   `.astro` files, a frontmatter that only imports `.astro` components and a template
+   expression made only of literals and names (or member reads) declared in a
+   frontmatter the pull request leaves unchanged (``{`${base}/privacy/`}``) count as
+   markup; a call, an operator or a name the pull request brings needs a person. The
+   list of what passes is in [`docs/invariants.md`](docs/invariants.md), I3.
+   This check is built to catch an agent's mistakes. It is not a sandbox against a hostile author: a pull request written to slip code past it can succeed, which is why code changes and new files under `site/public/` go to a person and why the agent's token should not hold the workflow permission.
+   Two consequences we accept: a name already declared on `main` that is a function
+   would be called by Astro (code already on `main` and reviewed; a hostile author is out
+   of scope), and importing an existing `.astro` component that computes things, with
+   literal props, passes on its own: that component's code runs.
    As secondary information, code files under `site/` are parsed whole and a key the
    registry does not declare is "Changes needed" with its line, in the forms listed:
    `env.X`, `env?.X`, `env['X']`, a destructuring over several lines, an alias, a

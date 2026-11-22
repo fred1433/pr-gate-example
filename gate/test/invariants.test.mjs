@@ -154,7 +154,11 @@ test('I3: markup, style and content under site/ pass on their own (the three gre
     'names and members': [edit('site/src/layouts/Base.astro', '<main><slot /></main>', '<main data-title={title} data-tel={site.phone.e164}><slot /></main>')],
     'style': [{ path: 'site/src/styles.css', content: '.foot a { color: #222; }\n' }],
     'markdown': [{ path: 'site/src/pages/faq.md', status: 'A', content: '# FAQ\n\nCall us.\n' }],
-    'image': [{ path: 'site/public/logo.png', status: 'A', content: '\x89PNG' }],
+    'image': [{ path: 'site/src/assets/logo.png', status: 'A', content: '\x89PNG' }],
+    'public file removed': [{ path: 'site/public/old.png', status: 'D', content: null }],
+    'links and styles': [{ path: 'site/src/pages/faq.md', status: 'A', content: '# FAQ\n\nSee [contact](/contact/), <https://example.org/> or <a href="https://example.org/">this</a>.\n<p style="color: red">x</p>\n' },
+      edit('site/src/styles.css', 'a { color: var(--green); }', 'a { color: var(--green); }\n.hero { background: url(/hero.png); }\n@font-face { font-family: x; src: url("./x.woff2"); }')],
+    'literal url': [edit('site/src/layouts/Base.astro', '<main><slot /></main>', '<main><a href={"/contact/"}>x</a><a href="mailto:a@example.org">m</a><slot /></main>')],
     'page removed': [{ path: 'site/src/pages/attorneys/index.astro', status: 'D', content: null, baseContent: mainFile('site/src/pages/attorneys/index.astro') }],
     'operator request': [{ path: 'ops/requests/contact-form/2-note.md', status: 'A', content: '# Note\n' }],
   };
@@ -193,7 +197,7 @@ test('I3: executable code goes to a person (worker, .js, .mjs, .ts, .cjs, build 
   for (const [label, attr] of Object.entries({ 'event handler': '<a onclick="go()">x</a>', 'set:html': '<div set:html="<i>x</i>"></div>', 'javascript: URL': '<a href="javascript:go()">x</a>', 'srcdoc': '<iframe srcdoc="<p>x</p>"></iframe>' })) {
     needsPerson(judgeFiles([edit('site/src/layouts/Base.astro', '<main><slot /></main>', `<main>${attr}<slot /></main>`)]), /event handler, set:html, srcdoc/, label);
   }
-  needsPerson(judge('site/src/pages/faq.md', '# FAQ\n<script>alert(1)</script>\n'), /holds a script/, 'script in markdown');
+  needsPerson(judge('site/src/pages/faq.md', '# FAQ\n<script>alert(1)</script>\n'), /holds a <script>/, 'script in markdown');
 });
 
 test('I3: a file outside site/ goes to a person, except the operator files under ops/requests/', () => {
@@ -233,6 +237,85 @@ test('I3: an extension the gate does not know goes to a person', () => {
   needsPerson(judge('site/src/data.bin', 'x'), /extension the gate does not know \(\.bin\)/, '.bin');
   needsPerson(judge('site/src/pages/LICENSE', 'x'), /extension the gate does not know \(none\)/, 'no extension');
   needsPerson(judge('site/src/pages/t.mdx', '# hi\n'), /executable code \(\.mdx\)/, '.mdx can hold code');
+});
+
+// The fourth review (21 Nov) got "Checks passed" with JavaScript that ran on the page.
+// One test per fix; the self-test builds one fixture per fix.
+const onMain = (expr) => judgeFiles([edit('site/src/layouts/Base.astro', '<main><slot /></main>', `<main>${expr}<slot /></main>`)]);
+test('I3: any file added or modified under site/public/ goes to a person, whatever its extension', () => {
+  for (const [path, content] of Object.entries({
+    'site/public/feed.xml': '<html xmlns="http://www.w3.org/1999/xhtml"><script>alert(1)</script></html>\n',
+    'site/public/promo.html': '<!doctype html><svg/onload=alert(1)>\n',
+    'site/public/logo.svg': '<svg xmlns="http://www.w3.org/2000/svg"></svg>\n',
+    'site/public/robots.txt': 'User-agent: *\n',
+    'site/public/logo.png': '\x89PNG',
+  })) {
+    needsPerson(judge(path, content), /under site\/public\//, `${path} added`);
+    needsPerson(judge(path, content, { status: 'M', baseContent: '' }), /under site\/public\//, `${path} modified`);
+  }
+});
+
+test('I3: a template expression uses only names of an unchanged frontmatter, never a name the pull request brings', () => {
+  // a new page: its import of the layout is allowed, the name it brings is not usable in {}
+  needsPerson(judge('site/src/pages/team.astro', "---\nimport Base from '../layouts/Base.astro';\n---\n<Base title=\"Team\"><p>{Base.name}</p></Base>\n"), /template expression that is code/, 'imported name');
+  needsPerson(judge('site/src/pages/team.astro', "---\nimport Base from '../layouts/Base.astro';\n---\n<Base title={Base}><p>x</p></Base>\n"), /template expression that is code/, 'imported name as a prop');
+  // a frontmatter the PR changes: the frontmatter goes to a person, and so do its names
+  const f = edit('site/src/layouts/Base.astro', '<main><slot /></main>', '<main>{ping}<slot /></main>');
+  f.content = f.content.replace("const base = ", "const ping = () => 'x';\nconst base = ");
+  const r = judgeFiles([f]);
+  needsPerson(r, /changes its frontmatter/, 'changed frontmatter');
+  assert.ok(r.items.some((i) => /template expression that is code/.test(i.why)), `the new name is not usable: ${JSON.stringify(r.items.map((i) => i.why))}`);
+  // names of the unchanged frontmatter (code on main) and member reads of them pass
+  assert.equal(onMain('<p data-t={title}>{site.phone.display}</p><a href={`${base}/x/`}>x</a>').status, 'pass');
+});
+
+test('I3: a URL attribute or expression with a javascript:, vbscript: or data: URL goes to a person, entities and spaces removed', () => {
+  for (const [label, html] of Object.entries({
+    'expression': '<a href={"javascript:alert(1)"}>x</a>', 'template': '<a href={`java${""}script:alert(1)`}>x</a>',
+    'tab': '<a href="java\tscript:alert(1)">x</a>', 'newline entity': '<a href="java&NewLine;script:alert(1)">x</a>',
+    'decimal entity': '<a href="&#106;avascript:alert(1)">x</a>', 'hex entity': '<a href="&#x6A;avascript:alert(1)">x</a>',
+    'upper case': '<a href="JaVaScRiPt:alert(1)">x</a>', 'leading space': '<a href=" \u0001javascript:alert(1)">x</a>',
+    'vbscript': '<a href="vbscript:msgbox(1)">x</a>', 'data': '<img src="data:image/svg+xml,<svg/onload=alert(1)>">',
+    'form action': '<form action="javascript:alert(1)"></form>', 'formaction': '<button formaction={"javascript:alert(1)"}>x</button>',
+    'xlink:href': '<svg><a xlink:href="javascript:alert(1)"><text>x</text></a></svg>', 'srcset': '<img srcset="/a.png 1x, data:image/png;base64,AA 2x">',
+  })) needsPerson(onMain(html), /javascript:, vbscript: or data: URL/, label);
+  for (const [label, md] of Object.entries({
+    'markdown link': '[b](&#106;avascript:alert(1))', 'escaped colon': '[b](javascript\\:alert(1))', 'reference': '[b]\n\n[b]: javascript:alert(1)',
+    'autolink': '<javascript:alert(1)>', 'html in markdown': '<a href="&#106;avascript:alert(1)">b</a>', 'data image': '![i](data:image/png;base64,AAA)',
+  })) needsPerson(judge('site/src/pages/faq.md', `# FAQ\n\n${md}\n`), /javascript:, vbscript: or data: URL/, label);
+});
+
+test('I3: <script> in any case, <base>, <iframe>, <object>, <embed>, <meta http-equiv> and any on* attribute go to a person', () => {
+  needsPerson(onMain('<SCRIPT>alert(1)</SCRIPT>'), /<script>/, 'SCRIPT');
+  for (const [label, html] of Object.entries({
+    base: '<base href="https://example.org/">', iframe: '<iframe src="/x/"></iframe>', object: '<object data="/x/"></object>',
+    embed: '<embed src="/x/">', 'meta http-equiv': '<meta http-equiv="refresh" content="0;url=/x/">',
+  })) needsPerson(onMain(html), new RegExp(`<${label}>`), label);
+  needsPerson(onMain('<p onClick="x()">x</p>'), /event handler/, 'onClick');
+  needsPerson(onMain('<a "x"onerror="alert(1)">x</a>'), null, '"x"onerror in .astro (not parsed)');
+  for (const [label, text] of Object.entries({
+    '/onload': '<svg/onload=alert(1)>', '"x"onerror': '<img src="/a.png" alt="x"onerror="alert(1)">', 'alt=""/onerror': '<img src="/a.png" alt=""/onerror="alert(1)">',
+  })) for (const path of ['site/src/pages/faq.md', 'site/src/pages/promo.html', 'site/src/assets/i.svg']) needsPerson(judge(path, `${text}\n`), /event handler/, `${label} in ${path}`);
+  for (const [label, text] of Object.entries({ SCRIPT: '<SCRIPT>alert(1)</SCRIPT>', base: '<base href="https://example.org/">', iframe: '<iframe src="/x/"></iframe>', object: '<object data="/x/"></object>', embed: '<embed src="/x/">', meta: '<meta http-equiv="refresh" content="0">' })) {
+    needsPerson(judge('site/src/pages/faq.md', `# FAQ\n\n${text}\n`), null, `${label} in markdown`);
+  }
+  needsPerson(judge('site/src/assets/feed.xml', '<html xmlns="http://www.w3.org/1999/xhtml"><script>alert(1)</script></html>\n'), /<script>/, 'xml outside public');
+  // a component the frontmatter imports may share a name with an element: <Base> is the layout
+  assert.equal(judge('site/src/pages/team.astro', "---\nimport Base from '../layouts/Base.astro';\n---\n<Base title=\"Team\"><p>x</p></Base>\n").status, 'pass');
+});
+
+test('I3: a style that loads from another domain (@import, url()) goes to a person', () => {
+  for (const [label, css] of Object.entries({
+    '@import url()': '@import url("https://example.org/x.css");', '@import string': "@import 'https://example.org/x.css';",
+    'url()': '.hero { background: url(https://example.org/a.png); }', 'protocol-relative': '.hero { background: url(//example.org/a.png); }',
+    'css escape': '.hero { background: u\\72l(https://example.org/a.png); }', 'font': '@font-face { font-family: x; src: url("https://example.org/x.woff2"); }',
+  })) {
+    needsPerson(judgeFiles([edit('site/src/styles.css', 'a { color: var(--green); }', `a { color: var(--green); }\n${css}`)]), /another domain/, `styles.css ${label}`);
+    needsPerson(onMain(`<style>${css}</style>`), /another domain/, `<style> ${label}`);
+  }
+  needsPerson(onMain('<p style="background: url(https://example.org/a.png)">x</p>'), /another domain/, 'style attribute');
+  needsPerson(onMain('<link rel="stylesheet" href="https://example.org/x.css">'), /another domain/, '<link rel=stylesheet>');
+  needsPerson(judge('site/src/pages/faq.md', '# FAQ\n\n<style>@import "https://example.org/x.css";</style>\n'), /another domain/, 'markdown <style>');
 });
 
 // The pull requests and forms the second and third reviews used to get past the old I3

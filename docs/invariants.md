@@ -6,7 +6,12 @@ the tests must catch (`node gate/mutants.mjs`).
 
 They were written after an outside review (21 Nov 2026) found a case against each of
 I1, I2 and I3, and an inexact sentence about I4. A third review the same day got past
-I3 again; I3 is now an allowlist.
+I3 again; I3 is now an allowlist. A fourth review the same day ran JavaScript on the page
+through it (a file under `site/public/`, an encoded `javascript:` URL, a handler written
+`/onload`); each of those forms now needs a person, with a test, a fixture and, for the
+first two fixes, a mutant.
+
+This check is built to catch an agent's mistakes. It is not a sandbox against a hostile author: a pull request written to slip code past it can succeed, which is why code changes and new files under `site/public/` go to a person and why the agent's token should not hold the workflow permission.
 
 ## I1. What is deployed is exactly the artifact that was tested
 
@@ -46,17 +51,30 @@ at every level. A PR adding `ops/dist/deploy-hook.sh` and `site/src/pages/dist/i
 ## I3. Only markup, style and content can pass on their own
 
 A pull request gets "Checks passed" only if every file it changes is markup, style or
-content under `site/`. This is an allowlist: it names what may pass, not the forms of
-code that may not, so a new way to write code changes nothing. Everything else gets
-"Human decision required", with the reason (`gate/lib/allowlist.mjs`):
+content under `site/`. This is an allowlist: it names what may pass. It is built to catch
+an agent's mistakes, not to stop a hostile author (see the top of this file). Everything
+else gets "Human decision required", with the reason (`gate/lib/allowlist.mjs`):
 
 - **Executable code, changed, added or removed**: the worker and every `.js`, `.mjs`,
   `.cjs`, `.ts`, `.mts`, `.cts`, `.jsx`, `.tsx` (also `.mdx`, `.vue`, `.svelte`, `.wasm`,
   `.sh`); the build configuration (`astro.config.*`, `vite.config.*`, `package.json`, any
   `.json`, `.yaml`, `.toml` or dotfile under `site/`); in an `.astro` file, a changed
-  frontmatter, a `<script>` added, changed or removed, an event handler attribute,
-  `set:html`, `srcdoc` or a `javascript:` URL; in `.md`, `.html` or `.svg`, a script, a
-  handler or an embedded document.
+  frontmatter, a `<script>` (any case) added, changed or removed, an event handler
+  attribute, `set:html`, `srcdoc`.
+- **Any file added or modified under `site/public/`**, whatever its extension (`.xml` and
+  `.svg` included): it is served as it is and nothing else checks it.
+- **Markup that runs or loads something**, in `.astro`, `.md`, `.html`, `.svg` and `.xml`
+  (Markdown and HTML read with parse5): `<script>` in any case, `<base>`, `<iframe>`,
+  `<object>`, `<embed>`, `<meta http-equiv>`, and any `on*` attribute, with or without a
+  space before it (`/onload`, `"x"onerror`).
+- **A `javascript:`, `vbscript:` or `data:` URL** in `href`, `src`, `action`,
+  `formaction`, `xlink:href`, `srcset` (and a `javascript:` or `vbscript:` value in any
+  attribute), after HTML entities are decoded and control characters and spaces removed,
+  in any case; for an expression, its literal parts and the names bound to a literal. In
+  Markdown, link destinations, reference definitions and autolinks too.
+- **A style that loads from another domain**: `@import` or `url()` to an absolute or
+  protocol-relative URL, after CSS escapes, in a stylesheet, a `<style>`, a `style`
+  attribute, or a `<link rel="stylesheet">`.
 - **A file outside `site/`**, except Markdown or text under `ops/requests/`.
 - **A symbolic link**, whatever it points to, **or a change of mode**, read from
   `git diff --raw` (a new file must be a plain `100644` file).
@@ -67,11 +85,17 @@ Two forms inside `.astro` files are allowed, because they are markup:
 - a frontmatter made only of default imports of a relative `.astro` file inside `site/`
   (`import Base from '../../layouts/Base.astro';`). A component imported that way and
   changed in the same pull request is judged by this rule like any other file;
-- a template expression made only of literals and of names declared in a frontmatter
-  the pull request leaves unchanged: `{title}`, `{site.phone.display}`,
-  ``{`${base}/privacy/`}``. No call, no operator, no computed key, nothing from `Astro`,
-  `process` or `import.meta`. Only expressions the pull request adds are judged; those
-  already on `main` are not.
+- a template expression made only of literals and of names (or member reads of them)
+  declared in a frontmatter the pull request leaves unchanged, code already on `main`:
+  `{title}`, `{site.phone.display}`, ``{`${base}/privacy/`}``. No call, no operator, no
+  computed key, nothing from `Astro`, `process` or `import.meta`, and no name the pull
+  request brings, not even one from an allowed import. Only expressions the pull request
+  adds are judged; those already on `main` are not.
+
+Two limits follow, and are accepted. A name already declared on `main` that is a function
+would be called by Astro: that is code already on `main` and reviewed, and a hostile
+author is out of scope. Importing an existing `.astro` component that computes things,
+with literal props, passes on its own, and that component's code runs.
 
 The three green pull requests posted on GitHub (1, 4 and 8) keep their verdict under this
 rule: text, static attributes, a link built from `base`, and a new page whose frontmatter
@@ -94,11 +118,16 @@ complete.
 - Tests: the "I3" tests in `gate/test/invariants.test.mjs`, one per category (code,
   outside `site/`, link and mode, unknown extension), one for what passes (the three
   green pull requests among them), one for every reviewer form, and one for the
-  environment reads. Self-test cases `reviewer-c1`, `reviewer-c3` and one per form, all
-  built whole and all "Human decision required".
+  environment reads; one per fix of the fourth review (`site/public/`, names the pull
+  request brings, URL schemes, markup that runs or loads, remote styles). Self-test cases
+  `reviewer-c1`, `reviewer-c3` and one per form, then `public-files`,
+  `template-new-name`, `url-scheme`, `markup-loaders` and `remote-style`, all built whole
+  and all "Human decision required".
 - Mutants: `allowlist-mjs-passes` (a modified `.mjs` taken for a stylesheet),
   `template-call-passes` (a call allowed in a template expression),
-  `import-non-astro-passes` (a frontmatter import of a non-`.astro` file allowed), and
+  `import-non-astro-passes` (a frontmatter import of a non-`.astro` file allowed),
+  `public-by-extension` (a file under `site/public/` judged by its extension again),
+  `template-pr-name-passes` (a name the pull request brings allowed in an expression), and
   `env-no-destructuring` (the secondary detection loses destructuring and aliases).
 
 ## I4. The trust boundary of the workflow is described exactly

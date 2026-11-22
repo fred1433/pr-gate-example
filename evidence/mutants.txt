@@ -7,6 +7,8 @@ killed env-no-destructuring       (I3, gate/lib/envreads.mjs): the I3 test fails
 killed allowlist-mjs-passes       (I3, gate/lib/allowlist.mjs): the I3 test fails; failing: I3, I3
 killed template-call-passes       (I3, gate/lib/allowlist.mjs): the I3 test fails; failing: I3
 killed import-non-astro-passes    (I3, gate/lib/allowlist.mjs): the I3 test fails; failing: I3
+killed public-by-extension        (I3, gate/lib/allowlist.mjs): the I3 test fails; failing: I3
+killed template-pr-name-passes    (I3, gate/lib/allowlist.mjs): the I3 test fails; failing: I3
 
-Control passes; all 6 mutants killed.
+Control passes; all 8 mutants killed.
 exit code: 0
